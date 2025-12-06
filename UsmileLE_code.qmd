@@ -1,0 +1,3379 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+## Data generation
+
+```{r}
+# -------------------------------------------------------------------
+# Step 1: Installation and loading the "bridge" to Python
+# -------------------------------------------------------------------
+
+# First set the path to the appropriate Python
+library(reticulate)
+
+# Set path to Python with scikit-learn installed
+use_python("C:/Users/p008587/AppData/Local/Programs/Python/Python313/python.exe")
+
+# Now try to import sklearn
+tryCatch({
+  # Import sklearn.datasets module from Python
+  skds <- import("sklearn.datasets")
+  cat("SUCCESS: sklearn imported successfully!\n")
+}, error = function(e) {
+  # Error handling: display helpful messages if import fails
+  cat("ERROR: Cannot import 'sklearn'. \n")
+  cat("Error message:", e$message, "\n")
+  cat("Make sure Python and 'scikit-learn' package are installed on your system.\n")
+  cat("Run in terminal: py -m pip install scikit-learn\n")
+})
+
+# -------------------------------------------------------------------
+# Step 2: "Transferring" the function from Python to R
+# -------------------------------------------------------------------
+
+# If import successful, continue
+if (exists("skds")) {
+  # Create an R function that is actually a Python object
+  make_classification <- skds$make_classification
+  
+  cat("SUCCESS: make_classification function transferred to R!\n")
+} else {
+  cat("Cannot proceed - sklearn not available.\n")
+}
+
+# -------------------------------------------------------------------
+# Step 3: Data generation
+# -------------------------------------------------------------------
+
+# Helper function to convert Python results to R data frame
+convert_to_df <- function(py_data) {
+  # Extract features (X) - in Python this is index 0, in R it's [[1]]
+  X <- py_data[[1]]
+  # Extract target labels (y) - in Python this is index 1, in R it's [[2]]
+  y <- py_data[[2]]
+  
+  # Convert the feature matrix to R data frame
+  df <- as.data.frame(X)
+  # Change column names to V1, V2, ... V10 for better readability
+  colnames(df) <- paste0("V", 1:ncol(df)) 
+  # Add the target variable as a factor with descriptive class names
+  df$Class <- y
+  return(df)
+}
+
+# --- Scenario 1: Low predictive power ---
+# n_features=10, n_informative=2, n_redundant=2, class_sep=0.5
+py_data_low <- make_classification(
+  n_samples = 1000L,      # Generate 1000 samples (L tells R to treat as integer)
+  n_features = 10L,       # Total number of features
+  n_informative = 2L,     # Only 2 features are actually predictive
+  n_redundant = 2L,       # 2 features are redundant (correlated with informative ones)
+  shuffle = FALSE,        # first: informative, then: redundant, then noninformative
+  n_clusters_per_class = 1L, # Good practice to simplify the problem
+  class_sep = 0.5,        # Small separation between classes (hard to distinguish)
+  flip_y = 0.1,           # 10% label noise (randomly flipped labels)
+  random_state = 123L     # Set seed for reproducibility
+)
+# Convert Python output to R data frame
+data_low_power <- convert_to_df(py_data_low)
+print("--- Scenario 1: Low predictive power (from Python) ---")
+# Display class distribution
+table(data_low_power$Class)
+
+
+# --- Scenario 2: Medium predictive power ---
+# n_features=10, n_informative=5, n_redundant=2, class_sep=1.0
+py_data_med <- make_classification(
+  n_samples = 1000L,      # 1000 samples
+  n_features = 10L,       # 10 total features
+  n_informative = 5L,     # 5 features are predictive (better than scenario 1)
+  n_redundant = 2L,       # 2 redundant features
+  shuffle = FALSE,        # first: informative, then: redundant, then noninformative
+  n_clusters_per_class = 1L, # Single cluster per class
+  class_sep = 1.0,        # Medium separation between classes
+  flip_y = 0.05,          # Only 5% label noise (less than scenario 1)
+  random_state = 123L     # Same seed for reproducibility
+)
+data_med_power <- convert_to_df(py_data_med)
+print("--- Scenario 2: Medium predictive power (from Python) ---")
+table(data_med_power$Class)
+
+
+# --- Scenario 3: High predictive power ---
+# n_features=10, n_informative=8, n_redundant=0, class_sep=2.0
+py_data_high <- make_classification(
+  n_samples = 1000L,      # 1000 samples
+  n_features = 10L,       # 10 total features
+  n_informative = 8L,     # 8 features are predictive (most features are useful)
+  n_redundant = 0L,       # No redundant features
+  shuffle = FALSE,        # first: informative, then: redundant, then noninformative
+  n_clusters_per_class = 1L, # Single cluster per class
+  class_sep = 2.0,        # Large separation between classes (easy to distinguish)
+  flip_y = 0.0,           # No label noise (perfect labels)
+  random_state = 123L     # Same seed for reproducibility
+)
+data_high_power <- convert_to_df(py_data_high)
+print("--- Scenario 3: High predictive power (from Python) ---")
+table(data_high_power$Class)
+
+
+# --- Scenario 4: Imbalanced data ---
+# Using medium power but with changed class balance (e.g., 90/10)
+# This is done using the 'weights' argument
+py_data_imb <- make_classification(
+  n_samples = 1000L,      # 1000 samples
+  n_features = 10L,       # 10 total features
+  n_informative = 5L,     # 5 predictive features (same as medium power scenario)
+  n_redundant = 2L,       # 2 redundant features
+  shuffle = FALSE,        # first: informative, then: redundant, then noninformative
+  n_clusters_per_class = 1L, # Single cluster per class
+  class_sep = 1.0,        # Medium separation (same as scenario 2)
+  weights = list(0.9, 0.1), # Class ratio 90% to 10% (highly imbalanced)
+  flip_y = 0.05,          # 5% label noise
+  random_state = 123L     # Same seed for reproducibility
+)
+data_imbalanced <- convert_to_df(py_data_imb)
+print("--- Scenario 4: Imbalanced data (from Python) ---")
+table(data_imbalanced$Class)
+
+
+# --- Scenario 5: Imbalanced and asymmetrical data ---
+# Using the same parameters as Scenario 4 but with modified V1
+py_data_imb_asym <- make_classification(
+  n_samples = 1000L,      # 1000 samples
+  n_features = 10L,       # 10 total features
+  n_informative = 5L,     # 5 predictive features (same as scenario 4)
+  n_redundant = 2L,       # 2 redundant features
+  shuffle = FALSE,        # first: informative, then: redundant, then noninformative
+  n_clusters_per_class = 1L, # Single cluster per class
+  class_sep = 1.0,        # Medium separation (same as scenario 4)
+  weights = list(0.9, 0.1), # Class ratio 90% to 10% (highly imbalanced)
+  flip_y = 0.05,          # 5% label noise
+  random_state = 123L     # Same seed for reproducibility
+)
+data_imbalanced_asym <- convert_to_df(py_data_imb_asym)
+
+# Modify V1 to have asymmetric distributions between classes
+modify_v1_asymmetric <- function(df) {
+  # Identify classes
+  non_events <- df$Class == 0  # non-events (majority class)
+  events <- df$Class == 1      # events (minority class)
+  
+  cat("Non-events (Class 0):", sum(non_events), "samples\n")
+  cat("Events (Class 1):", sum(events), "samples\n")
+  
+  # Modify V1 according to specification
+  set.seed(555)  # for reproducibility
+  
+  # For non-events: N(1, 4) - mean = 1, variance = 4 (sd = 2)
+  df$V1[non_events] <- rnorm(sum(non_events), mean = 1, sd = 2)
+  
+  # For events: N(0, 1) - mean = 0, variance = 1 (sd = 1)
+  df$V1[events] <- rnorm(sum(events), mean = 0, sd = 1)
+  
+  return(df)
+}
+
+# Apply V1 modification to imbalanced data
+data_imbalanced_asym <- modify_v1_asymmetric(data_imbalanced_asym)
+
+print("--- Scenario 5: Imbalanced and asymmetrical data ---")
+table(data_imbalanced_asym$Class)
+cat("Variable V1 has been MODIFIED:\n")
+cat("- N(1,4) for non-events (Class 0)\n")
+cat("- N(0,1) for events (Class 1)\n")
+
+
+# --- Scenario 6: Real Heart Disease Data ---
+# Using the actual heart disease dataset from Usmile package
+print("--- Scenario 6: Real Heart Disease Data ---")
+
+# Load the Usmile package and heart disease data
+library(Usmile)
+data(heart_disease)
+
+# Select only the real clinical variables as specified
+real_vars <- c("disease", "age", "sex", "cp", "bp", "chol", "glu", "ecg", "hr", "exang", "stde")
+
+# Create the dataset with only the specified variables
+data_real_heart <- heart_disease[, real_vars]
+
+# Remove any rows with missing values
+data_real_heart <- na.omit(data_real_heart)
+
+print(paste("Dataset created with", nrow(data_real_heart), "complete cases"))
+
+# Convert cp and ecg to factors with reference level as smallest value
+data_real_heart$cp <- factor(data_real_heart$cp, levels = sort(unique(data_real_heart$cp)))
+data_real_heart$ecg <- factor(data_real_heart$ecg, levels = sort(unique(data_real_heart$ecg)))
+
+# Convert disease to numeric (0/1) if it's factor
+if (is.factor(data_real_heart$disease)) {
+  data_real_heart$disease <- as.numeric(data_real_heart$disease) - 1
+}
+
+print("Real Heart Disease Data Structure:")
+str(data_real_heart)
+print("Class distribution:")
+table(data_real_heart$disease)
+print("Variable summary:")
+summary(data_real_heart)
+
+# Save all datasets for future use
+save(data_low_power, data_med_power, data_high_power, data_imbalanced, data_imbalanced_asym, data_real_heart,
+     file = "classification_datasets.RData")
+
+# Load the datasets to verify
+classification_datasets <- load("classification_datasets.RData")
+
+# Save to Excel (make sure writexl package is installed)
+if (!require(writexl)) {
+  install.packages("writexl")
+  library(writexl)
+}
+
+write_xlsx(
+  list(
+    "Low_Power" = data_low_power,
+    "Medium_Power" = data_med_power, 
+    "High_Power" = data_high_power,
+    "Imbalanced" = data_imbalanced,
+    "Imbalanced_Asym" = data_imbalanced_asym,
+    "Real_Heart_Disease" = data_real_heart
+  ),
+  path = "classification_datasets.xlsx"
+)
+
+cat("\n=== SUMMARY OF ALL SCENARIOS ===\n")
+cat("1. Low predictive power: 2 informative features, high noise\n")
+cat("2. Medium predictive power: 5 informative features, medium noise\n") 
+cat("3. High predictive power: 8 informative features, no noise\n")
+cat("4. Imbalanced data: 90/10 class distribution\n")
+cat("5. Imbalanced and asymmetrical data: 90/10 class distribution with V1: N(1,4) for non-events, N(0,1) for events\n")
+cat("6. Real Heart Disease Data: Actual clinical data with variables: disease, age, sex, cp, bp, chol, glu, ecg, hr, exang, stde\n")
+
+cat("\n=== DATASET CREATION COMPLETE ===\n")
+cat("All 6 scenarios have been successfully generated and saved to:\n")
+cat("- classification_datasets.RData\n")
+cat("- classification_datasets.xlsx\n")
+```
+
+## Univariate GLM (logistic regression) models
+
+```{r}
+# --------------------------------------------------------------------
+# CODE - U-SMILE WITH CALIBRATION AT THE END AND ROC, PR, U-SMILE PLOTS
+# --------------------------------------------------------------------
+
+library(openxlsx)
+library(pROC)
+library(PRROC)
+library(Usmile)
+library(ggplot2)
+
+# CONSTANT DEFINITIONS OF INFORMATIVE VARIABLES FOR ALL 6 SCENARIOS
+informative_variables <- list(
+  low = c("V1", "V2"),           # 2 informative variables
+  medium = c("V1", "V2", "V3", "V4", "V5"),  # 5 informative variables
+  high = c("V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8"),  # 8 informative variables
+  imbalanced = c("V1", "V2", "V3", "V4", "V5"),  # 5 informative variables
+  imbalanced_asym = c("V1", "V2", "V3", "V4", "V5"),  # 5 informative variables (same as imbalanced)
+  real_heart = c("age", "sex", "cp", "bp", "chol", "glu", "ecg", "hr", "exang", "stde")  # all real variables
+)
+
+# Helper functions
+get_predictor_variables <- function(data) {
+  # For synthetic scenarios
+  if ("Class" %in% names(data) && any(grepl("^V[0-9]+$", names(data)))) {
+    return(paste0("V", 1:10))
+  }
+  # For real heart disease scenario
+  if ("disease" %in% names(data)) {
+    predictor_vars <- setdiff(names(data), "disease")
+    return(predictor_vars)
+  }
+  # Default for other scenarios
+  return(paste0("V", 1:10))
+}
+
+is_variable_informative <- function(variable_name, scenario_name) {
+  # Check if variable is informative based on constant definitions
+  return(variable_name %in% informative_variables[[scenario_name]])
+}
+
+# Function to check data encoding
+check_data_encoding <- function(data) {
+  cat("=== DATA ENCODING CHECK ===\n")
+  
+  # Determine target variable name
+  target_var <- ifelse("Class" %in% names(data), "Class", "disease")
+  
+  cat("Target variable:", target_var, "\n")
+  cat("Target variable type:", class(data[[target_var]]), "\n")
+  cat("Unique values:", unique(data[[target_var]]), "\n")
+  
+  if (is.factor(data[[target_var]])) {
+    cat("Factor levels:", levels(data[[target_var]]), "\n")
+  }
+  
+  class_table <- table(data[[target_var]])
+  cat("Class distribution:\n")
+  print(class_table)
+  
+  if (length(unique(data[[target_var]])) != 2) {
+    warning("Target variable has more than 2 classes!")
+  }
+  cat("====================================\n\n")
+}
+
+# Cross-validation function WITHOUT CALIBRATION IN ITERATIONS
+cross_validate_model_with_calibration_with_usmile <- function(data, formula, n_folds = 10) {
+  set.seed(123)
+  n <- nrow(data)
+  folds <- sample(rep(1:n_folds, length.out = n))
+  
+  all_predictions_ref <- numeric(n)
+  all_predictions_new <- numeric(n)
+  all_labels <- numeric(n)
+  
+  # ADDED: Calculate mean from entire dataset for reference model
+  target_var <- ifelse("Class" %in% names(data), "Class", "disease")
+  
+  # Convert labels to 0/1 for entire dataset
+  if (is.factor(data[[target_var]])) {
+    overall_labels <- as.numeric(data[[target_var]]) - 1
+  } else if (is.character(data[[target_var]])) {
+    unique_classes <- unique(data[[target_var]])
+    if (length(unique_classes) == 2) {
+      class_mapping <- setNames(0:1, sort(unique_classes))
+      overall_labels <- class_mapping[data[[target_var]]]
+    } else {
+      overall_labels <- as.numeric(as.factor(data[[target_var]])) - 1
+    }
+  } else {
+    overall_labels <- as.numeric(data[[target_var]])
+  }
+  
+  # Mean from entire dataset (without fold splitting)
+  overall_mean_prob <- mean(overall_labels, na.rm = TRUE)
+  cat("Mean probability (reference model):", overall_mean_prob, "\n")
+  
+  # ADDED: Store detailed data for each observation
+  all_observations <- data.frame(
+    fold = integer(n),
+    observation_id = integer(n),
+    actual_y = numeric(n),
+    predicted_prob_ref = numeric(n),
+    predicted_prob_new = numeric(n),
+    stringsAsFactors = FALSE
+  )
+  
+  for (fold in 1:n_folds) {
+    train_indices <- which(folds != fold)
+    test_indices <- which(folds == fold)
+    
+    train_data <- data[train_indices, ]
+    test_data <- data[test_indices, ]
+    
+    # Reference model - use mean from entire dataset
+    predictions_ref <- rep(overall_mean_prob, length(test_indices))
+    
+    # Model with variable
+    model_new <- glm(formula, data = train_data, family = binomial)
+    predictions_new <- predict(model_new, newdata = test_data, type = "response")
+    
+    all_predictions_ref[test_indices] <- predictions_ref
+    all_predictions_new[test_indices] <- predictions_new
+    
+    # CONVERSION TO 0/1 for test labels
+    if (is.factor(test_data[[target_var]])) {
+      numeric_labels <- as.numeric(test_data[[target_var]]) - 1
+    } else if (is.character(test_data[[target_var]])) {
+      unique_classes <- unique(test_data[[target_var]])
+      if (length(unique_classes) == 2) {
+        class_mapping <- setNames(0:1, sort(unique_classes))
+        numeric_labels <- class_mapping[test_data[[target_var]]]
+      } else {
+        numeric_labels <- as.numeric(as.factor(test_data[[target_var]])) - 1
+      }
+    } else {
+      numeric_labels <- as.numeric(test_data[[target_var]])
+    }
+    
+    all_labels[test_indices] <- numeric_labels
+    
+    # Save detailed observation data
+    all_observations[test_indices, "fold"] <- fold
+    all_observations[test_indices, "observation_id"] <- test_indices
+    all_observations[test_indices, "actual_y"] <- numeric_labels
+    all_observations[test_indices, "predicted_prob_ref"] <- predictions_ref
+    all_observations[test_indices, "predicted_prob_new"] <- predictions_new
+  }
+  
+  return(list(
+    predictions_ref = all_predictions_ref,
+    predictions_new = all_predictions_new, 
+    labels = all_labels,
+    detailed_predictions = all_observations,
+    reference_model_value = overall_mean_prob
+  ))
+}
+
+# FUNCTION FOR CALIBRATION AT THE END
+calibrate_predictions <- function(detailed_predictions) {
+  cat("=== PREDICTION CALIBRATION ===\n")
+  
+  # Prepare data for calibration
+  calibration_data <- data.frame(
+    actual_y = detailed_predictions$actual_y,
+    predicted_prob_new = detailed_predictions$predicted_prob_new
+  )
+  
+  cat("Number of observations for calibration:", nrow(calibration_data), "\n")
+  cat("Unique actual_y:", unique(calibration_data$actual_y), "\n")
+  cat("Range predicted_prob_new before calibration:", 
+      round(range(calibration_data$predicted_prob_new), 4), "\n")
+  
+  # Calibration model
+  calibration_model <- glm(actual_y ~ predicted_prob_new, 
+                          data = calibration_data, 
+                          family = binomial)
+  
+  cat("Calibration model coefficients:\n")
+  print(summary(calibration_model)$coefficients)
+  
+  # Calibrated predictions
+  predictions_calibrated <- predict(calibration_model, 
+                                   newdata = calibration_data, 
+                                   type = "response")
+  
+  # Add calibrated predictions to data
+  detailed_predictions$predicted_prob_new_calibrated <- predictions_calibrated
+  
+  cat("Range predicted_prob_new_calibrated:", 
+      round(range(detailed_predictions$predicted_prob_new_calibrated), 4), "\n")
+  cat("Mean predicted_prob_new:", round(mean(detailed_predictions$predicted_prob_new), 4), "\n")
+  cat("Mean predicted_prob_new_calibrated:", round(mean(detailed_predictions$predicted_prob_new_calibrated), 4), "\n")
+  
+  return(detailed_predictions)
+}
+
+# Metrics calculation function - USES predicted_prob_new_calibrated
+calculate_all_metrics_from_detailed_data <- function(detailed_predictions, n_vars_diff = 1) {
+  y_actual <- detailed_predictions$actual_y
+  y_pred_new_calibrated <- detailed_predictions$predicted_prob_new_calibrated
+  y_pred_ref <- detailed_predictions$predicted_prob_ref
+  
+  results <- list()
+  
+  # 1. U-smile
+  tryCatch({
+    raw_data <- data.frame(
+      y = y_actual,
+      p_ref = y_pred_ref,
+      p = y_pred_new_calibrated  
+    )
+    
+    usmile_results <- UScalc_raw(raw_data, y_coef = "rLR", n_vars_diff)
+    
+    results$usmile <- list(
+      netto_Y_nonev = usmile_results$netto_Y_nonev,
+      netto_Y_event = usmile_results$netto_Y_event,
+      netto_Y_overall = usmile_results$Y_overall,
+      p_Y_nonev = usmile_results$p_Y_nonev,
+      p_Y_event = usmile_results$p_Y_event,
+      p_Y_overall = usmile_results$p_Y_overall,
+      # NEW: Add I coefficients
+      netto_I_nonev = usmile_results$netto_I_nonev,
+      netto_I_event = usmile_results$netto_I_event,
+      I_overall = usmile_results$I_overall,
+      df = usmile_results$df,
+      raw_results = usmile_results
+    )
+    
+  }, error = function(e) {
+    warning(paste("UScalc_raw error:", e$message))
+    results$usmile <- list(
+      netto_Y_nonev = NA, netto_Y_event = NA, netto_Y_overall = NA,
+      p_Y_nonev = NA, p_Y_event = NA, p_Y_overall = NA,
+      netto_I_nonev = NA, netto_I_event = NA, I_overall = NA,
+      df = NA,
+      raw_results = NULL
+    )
+  })
+  
+  # 2. AUC and AUC-pvalue
+  tryCatch({
+    if (length(unique(y_actual)) >= 2) {
+      roc_obj <- roc(y_actual, y_pred_new_calibrated, quiet = TRUE)  
+      results$auc_value <- as.numeric(auc(roc_obj))
+      results$auc_pvalue <- calculate_auc_pvalue_v2(y_pred_new_calibrated, y_actual)
+    } else {
+      results$auc_value <- NA
+      results$auc_pvalue <- NA
+    }
+  }, error = function(e) {
+    warning(paste("AUC error:", e$message))
+    results$auc_value <- NA
+    results$auc_pvalue <- NA
+  })
+  
+  # 3. AUC-PR 
+  tryCatch({
+    if (length(unique(y_actual)) >= 2) {
+      pr_curve <- pr.curve(scores.class0 = y_pred_new_calibrated[y_actual == 1],  
+                          scores.class1 = y_pred_new_calibrated[y_actual == 0],  
+                          curve = TRUE)
+      results$auc_pr <- pr_curve$auc.integral
+    } else {
+      results$auc_pr <- NA
+    }
+  }, error = function(e) {
+    warning(paste("AUC-PR error:", e$message))
+    results$auc_pr <- NA
+  })
+  
+  # 4. CLLR
+  tryCatch({
+    results$cllr <- calculate_cllr(y_pred_new_calibrated, y_actual)  
+  }, error = function(e) {
+    warning(paste("CLLR error:", e$message))
+    results$cllr <- NA
+  })
+  
+  # 5. Youden metrics
+  tryCatch({
+    if (length(unique(y_actual)) >= 2) {
+      roc_obj <- roc(y_actual, y_pred_new_calibrated, quiet = TRUE)  
+      youden_index <- which.max(roc_obj$sensitivities + roc_obj$specificities - 1)
+      youden_threshold <- roc_obj$thresholds[youden_index]
+      binary_preds <- ifelse(y_pred_new_calibrated >= youden_threshold, 1, 0)  
+      
+      TP <- sum(binary_preds == 1 & y_actual == 1)
+      TN <- sum(binary_preds == 0 & y_actual == 0)
+      FP <- sum(binary_preds == 1 & y_actual == 0)
+      FN <- sum(binary_preds == 0 & y_actual == 1)
+      
+      sensitivity <- ifelse((TP + FN) > 0, TP / (TP + FN), 0)
+      specificity <- ifelse((TN + FP) > 0, TN / (TN + FP), 0)
+      precision <- ifelse((TP + FP) > 0, TP / (TP + FP), 0)
+      f1_score <- ifelse((precision + sensitivity) > 0, 
+                         2 * (precision * sensitivity) / (precision + sensitivity), 0)
+      
+      results$youden <- list(
+        youden_threshold = youden_threshold,
+        TP = TP, TN = TN, FP = FP, FN = FN,
+        sensitivity = sensitivity, specificity = specificity,
+        precision = precision, f1_score = f1_score
+      )
+    } else {
+      results$youden <- list(
+        youden_threshold = NA, TP = NA, TN = NA, FP = NA, FN = NA,
+        sensitivity = NA, specificity = NA, precision = NA, f1_score = NA
+      )
+    }
+  }, error = function(e) {
+    results$youden <- list(
+      youden_threshold = NA, TP = NA, TN = NA, FP = NA, FN = NA,
+      sensitivity = NA, specificity = NA, precision = NA, f1_score = NA
+    )
+  })
+  
+  return(results)
+}
+
+# FUNCTION FOR CREATING U-SMILE PLOTS 
+create_variable_plots_calibrated <- function(detailed_predictions_calibrated, variable_name, scenario_name) {
+  plots <- list()
+  
+  # USE CALIBRATED PREDICTIONS FOR ALL PLOTS
+  y_actual <- detailed_predictions_calibrated$actual_y
+  y_pred_ref <- detailed_predictions_calibrated$predicted_prob_ref
+  y_pred_new_calibrated <- detailed_predictions_calibrated$predicted_prob_new_calibrated
+  
+  # 1. U-smile plot 
+  tryCatch({
+    raw_data <- data.frame(
+      y = y_actual,
+      p_ref = y_pred_ref,
+      p = y_pred_new_calibrated  
+    )
+    
+    # Check if sufficient data available
+    if (nrow(raw_data) > 10 && length(unique(raw_data$y)) == 2) {
+      usmile_results <- UScalc_raw(raw_data, y_coef = "rLR", n_vars_diff = 1)
+      
+      # Extract netto values for annotations
+      netto_nonev <- usmile_results$netto_Y_nonev
+      netto_event <- usmile_results$netto_Y_event
+      
+      # Create custom U-smile plot with modified labels and annotations
+      usmile_plot <- USplot(plot_data = usmile_results, y_coef = "rLR")
+      
+      # Modify the plot with new title, x-axis labels and annotations
+      usmile_plot <- usmile_plot +
+        ggtitle(paste(scenario_name, "-", variable_name)) +
+        scale_x_discrete(
+          limits = c('nonev_be', 'nonev_wo', 'event_wo', 'event_be'),
+          labels = c("0+", "0-", "1-", "1+")
+        ) +
+        # Add netto for non-events (top left)
+        annotate("text", x = 0.02, y = 0.98, 
+                 label = ifelse(!is.na(netto_nonev), paste0("rLR0=", round(netto_nonev, 3)), "rLR0=NA"),
+                 hjust = 0, vjust = 1, size = 3, 
+                 color = "#0F3C78", fontface = "bold") +
+        # Add netto for events (top right)
+        annotate("text", x = 4.98, y = 0.98, 
+                 label = ifelse(!is.na(netto_event), paste0("rLR1=", round(netto_event, 3)), "rLR1=NA"),
+                 hjust = 1, vjust = 1, size = 3, 
+                 color = "#D51424", fontface = "bold") +
+        theme_minimal() +
+        theme(
+          plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+          axis.title = element_text(size = 9),
+          axis.text = element_text(size = 7),
+          legend.position = "none"
+        )
+      
+      plots$usmile <- usmile_plot
+    } else {
+      plots$usmile <- NULL
+    }
+  }, error = function(e) {
+    cat("Error creating U-smile plot:", e$message, "\n")
+    plots$usmile <- NULL
+  })
+  
+  # 2. ROC plot
+  tryCatch({
+    if (length(unique(y_actual)) >= 2 && sum(!is.na(y_pred_new_calibrated)) > 10) {
+      # Prepare data in format required by ROCplot
+      roc_data_ref <- list(
+        y = y_actual,
+        p = y_pred_ref
+      )
+      
+      roc_data_new <- list(
+        y = y_actual,
+        p = y_pred_new_calibrated  
+      )
+      
+      roc_result <- ROCplot(
+        data_ref = roc_data_ref,
+        data_new = roc_data_new,
+        title = paste(scenario_name, "-", variable_name, "(ROC)"),
+        alternative = "two.sided"
+      )
+      
+      if (!is.null(roc_result$plot)) {
+        roc_plot <- roc_result$plot +
+          theme_minimal() +
+          theme(plot.title = element_text(size = 12, hjust = 0.5))
+        
+        plots$roc <- roc_plot
+      } else {
+        plots$roc <- NULL
+      }
+    } else {
+      plots$roc <- NULL
+    }
+  }, error = function(e) {
+    plots$roc <- NULL
+  })
+  
+  # 3. Precision-Recall plot 
+  tryCatch({
+    if (length(unique(y_actual)) >= 2 && sum(!is.na(y_pred_new_calibrated)) > 10) {
+      # Prepare data in format required by PRCplot
+      pr_data_ref <- list(
+        y = y_actual,
+        p = y_pred_ref
+      )
+      
+      pr_data_new <- list(
+        y = y_actual,
+        p = y_pred_new_calibrated  
+      )
+      
+      pr_result <- PRCplot(
+        data_ref = pr_data_ref,
+        data_new = pr_data_new,
+        title = paste(scenario_name, "-", variable_name, "(PR)"),
+        n_boot = 100
+      )
+      
+      if (!is.null(pr_result$plot)) {
+        pr_plot <- pr_result$plot +
+          theme_minimal() +
+          theme(plot.title = element_text(size = 12, hjust = 0.5))
+        
+        plots$pr <- pr_plot
+      } else {
+        plots$pr <- NULL
+      }
+    } else {
+      plots$pr <- NULL
+    }
+  }, error = function(e) {
+    plots$pr <- NULL
+  })
+  
+  return(plots)
+}
+
+# Function for displaying plots
+display_variable_plots <- function(plots, variable_name, scenario_name) {
+  cat("\n=== VISUALIZATIONS FOR VARIABLE:", variable_name, "- SCENARIO:", scenario_name, "===\n")
+  
+  # Check if plots exist for display
+  if (is.null(plots) || length(plots) == 0) {
+    cat("No plots to display\n")
+    return()
+  }
+  
+  # Display each available plot
+  plot_names <- names(plots)
+  
+  for (plot_name in plot_names) {
+    if (!is.null(plots[[plot_name]])) {
+      cat("--- Displaying plot:", plot_name, "---\n")
+      tryCatch({
+        print(plots[[plot_name]])
+        # Add short pause between plots
+        Sys.sleep(1)
+      }, error = function(e) {
+        cat("Error displaying plot", plot_name, ":", e$message, "\n")
+      })
+    } else {
+      cat("--- Plot", plot_name, "is NULL ---\n")
+    }
+  }
+  
+  cat("=== END OF VISUALIZATIONS ===\n\n")
+}
+
+calculate_auc_pvalue_v2 <- function(predictions, labels) {
+  if (length(unique(labels)) < 2) {
+    return(NA)
+  }
+  if (sum(!is.na(predictions)) < 10) {
+    return(NA)
+  }
+  tryCatch({
+    roc_obj <- roc(labels, predictions, quiet = TRUE)
+    random_predictions <- rep(0.5, length(predictions))
+    random_roc <- roc(labels, random_predictions, quiet = TRUE)
+    delong_test <- roc.test(roc_obj, random_roc, method = "delong", alternative = "greater")
+    return(delong_test$p.value)
+  }, error = function(e) {
+    tryCatch({
+      roc_obj <- roc(labels, predictions, quiet = TRUE)
+      auc_value <- auc(roc_obj)
+      n <- length(labels)
+      n1 <- sum(labels == 1)
+      n0 <- sum(labels == 0)
+      Q1 <- auc_value / (2 - auc_value)
+      Q2 <- (2 * auc_value^2) / (1 + auc_value)
+      se_auc <- sqrt((auc_value * (1 - auc_value) + (n1 - 1) * (Q1 - auc_value^2) + (n0 - 1) * (Q2 - auc_value^2)) / (n1 * n0))
+      z <- (auc_value - 0.5) / se_auc
+      p_value <- pnorm(z, lower.tail = FALSE)
+      return(p_value)
+    }, error = function(e2) {
+      return(NA)
+    })
+  })
+}
+
+calculate_cllr <- function(scores, labels) {
+  true_cases <- as.logical(labels)
+  false_cases <- !true_cases
+  costs_true <- -log2(scores[true_cases])
+  costs_true[is.infinite(costs_true)] <- 1000
+  costs_false <- -log2(1 - scores[false_cases])
+  costs_false[is.infinite(costs_false)] <- 1000
+  n_true <- sum(true_cases)
+  n_false <- sum(false_cases)
+  cllr <- (sum(costs_true) + sum(costs_false)) / (2 * length(scores))
+  return(cllr)
+}
+
+# MAIN VARIABLE EVALUATION FUNCTION WITH CALIBRATION AT THE END AND PLOTS ON CALIBRATED DATA
+evaluate_single_variable_cv_fixed <- function(data, variable_name, scenario_name, create_plots = FALSE) {
+  target_var <- ifelse("Class" %in% names(data), "Class", "disease")
+  
+  formula_var <- as.formula(paste(target_var, "~", variable_name))
+  
+  # 1. CROSS-VALIDATION WITHOUT CALIBRATION
+  cv_results <- cross_validate_model_with_calibration_with_usmile(data, formula_var)
+  detailed_predictions <- cv_results$detailed_predictions
+  reference_value <- cv_results$reference_model_value
+  
+  # 2. CALIBRATION AT THE END ON ALL DATA
+  detailed_predictions_calibrated <- calibrate_predictions(detailed_predictions)
+  
+  # 3. METRICS CALCULATION ON CALIBRATED DATA
+  cat("\n=== CALCULATIONS FOR VARIABLE:", variable_name, "===\n")
+  metrics <- calculate_all_metrics_from_detailed_data(detailed_predictions_calibrated)
+  
+  # USE CONSTANT DEFINITIONS OF INFORMATIVE VARIABLES
+  is_informative <- is_variable_informative(variable_name, scenario_name)
+  
+  # 4. PLOT CREATION ON CALIBRATED DATA
+  plots <- NULL
+  if (create_plots) {
+    plots <- create_variable_plots_calibrated(detailed_predictions_calibrated, variable_name, scenario_name)
+  }
+  
+  result_df <- data.frame(
+    variable = variable_name,
+    usmile_netto_nonev = metrics$usmile$netto_Y_nonev,
+    usmile_netto_event = metrics$usmile$netto_Y_event,
+    usmile_netto_overall = metrics$usmile$netto_Y_overall,
+    usmile_p_nonev = metrics$usmile$p_Y_nonev,
+    usmile_p_event = metrics$usmile$p_Y_event,
+    usmile_p_overall = metrics$usmile$p_Y_overall,
+    usmile_netto_I_nonev = metrics$usmile$netto_I_nonev,
+    usmile_netto_I_event = metrics$usmile$netto_I_event,
+    usmile_I_overall = metrics$usmile$I_overall,
+    usmile_df = metrics$usmile$df,
+    auc = metrics$auc_value,
+    auc_pvalue = metrics$auc_pvalue,
+    auc_pr = metrics$auc_pr,
+    cllr = metrics$cllr,
+    youden_threshold = metrics$youden$youden_threshold,
+    TP = metrics$youden$TP,
+    TN = metrics$youden$TN,
+    FP = metrics$youden$FP,
+    FN = metrics$youden$FN,
+    sensitivity = metrics$youden$sensitivity,
+    specificity = metrics$youden$specificity,
+    precision = metrics$youden$precision,
+    f1_score = metrics$youden$f1_score,
+    reference_model_prob = reference_value,
+    is_informative = is_informative,
+    scenario = scenario_name,
+    stringsAsFactors = FALSE
+  )
+  
+  return(list(
+    results = result_df, 
+    plots = plots,
+    detailed_predictions = detailed_predictions_calibrated,  # RETURN CALIBRATED DATA
+    cv_data = list(
+      y_actual = detailed_predictions_calibrated$actual_y,
+      y_predicted_proba = detailed_predictions_calibrated$predicted_prob_new,  # Original predictions
+      y_predicted_proba_calibrated = detailed_predictions_calibrated$predicted_prob_new_calibrated, 
+      y_predicted_proba_ref = detailed_predictions_calibrated$predicted_prob_ref
+    ),
+    usmile_raw_results = metrics$usmile$raw_results
+  ))
+}
+
+# SIMPLIFIED EXPORT TO EXCEL 
+export_all_results_to_excel <- function(results_fixed_detailed, filename = "usmile_complete_results.xlsx") {
+  wb <- createWorkbook()
+  
+  # 1. Combined summary sheet for all scenarios
+  all_summaries <- list()
+  for(scenario_name in names(results_fixed_detailed)) {
+    scenario_summary <- results_fixed_detailed[[scenario_name]]$summary
+    all_summaries[[scenario_name]] <- scenario_summary
+  }
+  final_summary <- do.call(rbind, all_summaries)
+  
+  addWorksheet(wb, "Combined_Summary")
+  writeData(wb, "Combined_Summary", final_summary)
+  
+  # 2. Individual sheets for each scenario with metric results
+  for(scenario_name in names(results_fixed_detailed)) {
+    addWorksheet(wb, paste0("Results_", scenario_name))
+    writeData(wb, paste0("Results_", scenario_name), results_fixed_detailed[[scenario_name]]$summary)
+  }
+  
+  # 3. Sheet with detailed predictions (with predicted_prob_new_calibrated)
+  all_detailed_predictions <- list()
+  for(scenario_name in names(results_fixed_detailed)) {
+    scenario_details <- results_fixed_detailed[[scenario_name]]$detailed
+    
+    for(var_name in names(scenario_details)) {
+      if (!is.null(scenario_details[[var_name]]$detailed_predictions)) {
+        pred_data <- scenario_details[[var_name]]$detailed_predictions
+        pred_data$variable <- var_name
+        pred_data$scenario <- scenario_name
+        pred_data$is_informative <- scenario_details[[var_name]]$results$is_informative
+        all_detailed_predictions[[paste(scenario_name, var_name, sep = "_")]] <- pred_data
+      }
+    }
+  }
+  
+  if (length(all_detailed_predictions) > 0) {
+    combined_predictions <- do.call(rbind, all_detailed_predictions)
+    addWorksheet(wb, "Detailed_Predictions")
+    writeData(wb, "Detailed_Predictions", combined_predictions)
+  }
+  
+  saveWorkbook(wb, filename, overwrite = TRUE)
+  cat("All data saved to Excel file:", filename, "\n")
+  
+  return(filename)
+}
+
+# SCENARIO DEFINITIONS FOR ALL 6 SCENARIOS 
+scenarios <- list(
+  low = data_low_power,
+  medium = data_med_power, 
+  high = data_high_power,
+  imbalanced = data_imbalanced,
+  imbalanced_asym = data_imbalanced_asym,  
+  real_heart = data_real_heart
+)
+
+# MAIN EXECUTION PART
+# Check data encoding before starting
+for(scenario_name in names(scenarios)) {
+  cat("Scenario:", scenario_name, "\n")
+  check_data_encoding(scenarios[[scenario_name]])
+}
+
+# Conduct analysis WITH CALIBRATION AT THE END AND PLOTS ON CALIBRATED DATA
+results_fixed_detailed <- list()
+all_plots <- list()
+
+# Parameter controlling plot creation (TRUE/FALSE)
+create_plots <- TRUE  # Change to TRUE if you want plots
+
+for(scenario_name in names(scenarios)) {
+  data <- scenarios[[scenario_name]]
+  
+  cat("=== Scenario:", scenario_name, "===\n")
+  
+  predictor_vars <- get_predictor_variables(data)
+  cat("Analyzed variables:", paste(predictor_vars, collapse = ", "), "\n")
+  cat("Informative variables for this scenario:", paste(informative_variables[[scenario_name]], collapse = ", "), "\n")
+  
+  variable_summaries <- list()
+  scenario_plots <- list()
+  scenario_detailed_results <- list()
+  
+  for(var in predictor_vars) {
+    cat("  Analyzing variable:", var, "\n")
+    
+    tryCatch({
+      result <- evaluate_single_variable_cv_fixed(data, var, scenario_name, create_plots)
+      variable_summaries[[var]] <- result$results
+      scenario_detailed_results[[var]] <- result
+      
+      if (create_plots && !is.null(result$plots)) {
+        scenario_plots[[var]] <- result$plots
+        # Display plots for this variable
+        display_variable_plots(result$plots, var, scenario_name)
+      }
+      
+    }, error = function(e) {
+      cat("    Error for variable", var, ":", e$message, "\n")
+      error_result <- data.frame(
+        variable = var,
+        usmile_netto_nonev = NA, usmile_netto_event = NA, usmile_netto_overall = NA,
+        usmile_p_nonev = NA, usmile_p_event = NA, usmile_p_overall = NA,
+        # NEW: I coefficients with NA values
+        usmile_netto_I_nonev = NA, usmile_netto_I_event = NA, usmile_I_overall = NA,
+        usmile_df = NA,
+        auc = NA, auc_pvalue = NA, auc_pr = NA, cllr = NA,
+        youden_threshold = NA, TP = NA, TN = NA, FP = NA, FN = NA,
+        sensitivity = NA, specificity = NA, precision = NA, f1_score = NA,
+        reference_model_prob = NA,
+        is_informative = is_variable_informative(var, scenario_name),
+        scenario = scenario_name,
+        stringsAsFactors = FALSE
+      )
+      variable_summaries[[var]] <- error_result
+    })
+  }
+  
+  scenario_results <- do.call(rbind, variable_summaries)
+  results_fixed_detailed[[scenario_name]] <- list(
+    summary = scenario_results,
+    detailed = scenario_detailed_results
+  )
+  all_plots[[scenario_name]] <- scenario_plots
+  
+  print(scenario_results)
+  cat("\n")
+}
+
+# Save all results to Excel
+excel_filename <- export_all_results_to_excel(results_fixed_detailed)
+
+# Save plots if they were created
+if (create_plots && length(all_plots) > 0) {
+  save(all_plots, file = "variable_plots_calibrated.RData")
+  cat("Plots saved to file: variable_plots_calibrated.RData\n")
+}
+
+cat("=== ANALYSIS COMPLETED ===\n")
+cat("All data saved to Excel file:", excel_filename, "\n")
+
+#results_fixed_detailed$imbalanced$detailed$V5$plots$usmile
+```
+
+## GLM (logistic regression) Stepwise Selection based on p-value
+
+```{r}
+# --------------------------------------------------------------------
+# COMPLETE STEPWISE SELECTION CODE WITH CALIBRATION ON FULL DATASET
+# --------------------------------------------------------------------
+
+# Load required packages
+if (!require(pROC)) {
+  install.packages("pROC")
+  library(pROC)
+}
+
+if (!require(PRROC)) {
+  install.packages("PRROC")
+  library(PRROC)
+}
+
+if (!require(writexl)) {
+  install.packages("writexl")
+  library(writexl)
+}
+
+if (!require(Usmile)) {
+  install.packages("Usmile")
+  library(Usmile)
+}
+
+# --------------------------------------------------------------------
+# HELPER FUNCTIONS
+# --------------------------------------------------------------------
+
+get_n_informative <- function(data) {
+  if ("Class" %in% names(data)) {
+    informative_vars <- grep("^V[0-9]+$", names(data), value = TRUE)
+    if (length(informative_vars) > 0) {
+      return(min(3, length(informative_vars)))
+    }
+  }
+  return(5)
+}
+
+get_predictor_variables <- function(data) {
+  # For synthetic scenarios
+  if ("Class" %in% names(data) && any(grepl("^V[0-9]+$", names(data)))) {
+    return(paste0("V", 1:10))
+  }
+  # For real heart disease scenario
+  if ("disease" %in% names(data)) {
+    predictor_vars <- setdiff(names(data), "disease")
+    return(predictor_vars)
+  }
+  # Default for other scenarios
+  return(paste0("V", 1:10))
+}
+
+calculate_auc_pr <- function(predictions, labels) {
+  tryCatch({
+    if (length(unique(labels)) < 2) {
+      return(NA)
+    }
+    if (!is.numeric(labels)) {
+      labels <- as.numeric(as.factor(labels)) - 1
+    }
+    labels <- as.integer(labels)
+    pr_curve <- pr.curve(scores.class0 = predictions[labels == 1],
+                         scores.class1 = predictions[labels == 0],
+                         curve = TRUE)
+    return(pr_curve$auc.integral)
+  }, error = function(e) {
+    return(NA)
+  })
+}
+
+calculate_cllr <- function(scores, labels) {
+  scores <- pmin(pmax(scores, 1e-6), 1 - 1e-6)
+  
+  true_cases <- as.logical(labels)
+  false_cases <- !true_cases
+  
+  costs_true <- -log2(scores[true_cases])
+  costs_false <- -log2(1 - scores[false_cases])
+  
+  cllr <- (sum(costs_true) + sum(costs_false)) / length(scores)
+  
+  return(cllr)
+}
+
+calculate_youden_metrics <- function(predictions, labels) {
+  tryCatch({
+    roc_obj <- pROC::roc(labels, predictions, quiet = TRUE)
+    youden_index <- which.max(roc_obj$sensitivities + roc_obj$specificities - 1)
+    youden_threshold <- roc_obj$thresholds[youden_index]
+    binary_preds <- ifelse(predictions >= youden_threshold, 1, 0)
+    
+    TP <- sum(binary_preds == 1 & labels == 1)
+    TN <- sum(binary_preds == 0 & labels == 0)
+    FP <- sum(binary_preds == 1 & labels == 0)
+    FN <- sum(binary_preds == 0 & labels == 1)
+    
+    sensitivity <- ifelse((TP + FN) > 0, TP / (TP + FN), 0)
+    specificity <- ifelse((TN + FP) > 0, TN / (TN + FP), 0)
+    precision <- ifelse((TP + FP) > 0, TP / (TP + FP), 0)
+    f1_score <- ifelse((precision + sensitivity) > 0, 
+                       2 * (precision * sensitivity) / (precision + sensitivity), 0)
+    
+    return(list(
+      sensitivity = sensitivity,
+      specificity = specificity,
+      precision = precision,
+      f1_score = f1_score
+    ))
+  }, error = function(e) {
+    return(list(
+      sensitivity = NA,
+      specificity = NA,
+      precision = NA,
+      f1_score = NA
+    ))
+  })
+}
+
+# --------------------------------------------------------------------
+# CORRECT CROSS-VALIDATION WITH CALIBRATION ON FULL DATASET
+# --------------------------------------------------------------------
+
+cross_validate_model_with_calibration <- function(data, formula_ref, formula_new = NULL, n_folds = 10) {
+  set.seed(123)
+  n <- nrow(data)
+  folds <- sample(rep(1:n_folds, length.out = n))
+  
+  all_predictions_ref <- numeric(n)
+  all_predictions_new <- numeric(n)
+  all_labels <- numeric(n)
+  fold_assignments <- numeric(n)
+  
+  # Determine target variable name
+  target_var <- ifelse("Class" %in% names(data), "Class", "disease")
+  
+  # STEP 1: PERFORM CROSS-VALIDATION (RAW PREDICTIONS)
+  for (fold in 1:n_folds) {
+    train_indices <- which(folds != fold)
+    test_indices <- which(folds == fold)
+    
+    train_data <- data[train_indices, ]
+    test_data <- data[test_indices, ]
+    
+    # Reference model
+    if (length(all.vars(formula_ref)) == 1) { # Only intercept
+      # Empty model - use mean from training data
+      if (is.factor(train_data[[target_var]])) {
+        ref_prob <- mean(as.numeric(train_data[[target_var]]) - 1)
+      } else {
+        ref_prob <- mean(train_data[[target_var]])
+      }
+      all_predictions_ref[test_indices] <- rep(ref_prob, length(test_indices))
+    } else {
+      # Model with variables
+      model_ref <- glm(formula_ref, data = train_data, family = binomial)
+      all_predictions_ref[test_indices] <- predict(model_ref, newdata = test_data, type = "response")
+    }
+    
+    # New model (if provided)
+    if (!is.null(formula_new)) {
+      model_new <- glm(formula_new, data = train_data, family = binomial)
+      all_predictions_new[test_indices] <- predict(model_new, newdata = test_data, type = "response")
+    }
+    
+    fold_assignments[test_indices] <- fold
+    
+    # Save labels
+    if (is.factor(test_data[[target_var]])) {
+      all_labels[test_indices] <- as.numeric(test_data[[target_var]]) - 1
+    } else {
+      all_labels[test_indices] <- as.numeric(test_data[[target_var]])
+    }
+  }
+  
+  # STEP 2: CALIBRATION ON ENTIRE DATASET
+  if (!is.null(formula_new)) {
+    # Calibration of reference model (only if not empty)
+    if (length(all.vars(formula_ref)) > 1) {
+      calibration_ref <- glm(all_labels ~ all_predictions_ref, family = binomial)
+      all_predictions_ref_calibrated <- predict(calibration_ref, type = "response")
+    } else {
+      all_predictions_ref_calibrated <- all_predictions_ref
+    }
+    
+    # Calibration of new model
+    calibration_new <- glm(all_labels ~ all_predictions_new, family = binomial)
+    all_predictions_new_calibrated <- predict(calibration_new, type = "response")
+    
+    return(list(
+      predictions_ref = all_predictions_ref_calibrated,
+      predictions_new = all_predictions_new_calibrated,
+      labels = all_labels,
+      folds = fold_assignments,
+      predictions_ref_raw = all_predictions_ref,
+      predictions_new_raw = all_predictions_new
+    ))
+  } else {
+    # Only reference model
+    if (length(all.vars(formula_ref)) > 1) {
+      calibration_ref <- glm(all_labels ~ all_predictions_ref, family = binomial)
+      all_predictions_ref_calibrated <- predict(calibration_ref, type = "response")
+    } else {
+      all_predictions_ref_calibrated <- all_predictions_ref
+    }
+    
+    return(list(
+      predictions_ref = all_predictions_ref_calibrated,
+      labels = all_labels,
+      folds = fold_assignments,
+      predictions_ref_raw = all_predictions_ref
+    ))
+  }
+}
+
+# --------------------------------------------------------------------
+# MODEL COMPARISON WITH CALIBRATION
+# --------------------------------------------------------------------
+
+compare_models_with_cv_calibrated <- function(data, base_vars, candidate_var, method = "auc", n_folds = 10) {
+  target_var <- ifelse("Class" %in% names(data), "Class", "disease")
+  
+  if (length(base_vars) > 0) {
+    formula_ref <- as.formula(paste(target_var, "~", paste(base_vars, collapse = " + ")))
+  } else {
+    formula_ref <- as.formula(paste(target_var, "~ 1"))
+  }
+  
+  formula_new <- as.formula(paste(target_var, "~", paste(c(base_vars, candidate_var), collapse = " + ")))
+  
+  cv_results <- cross_validate_model_with_calibration(data, formula_ref, formula_new, n_folds)
+  
+  if (method == "auc") {
+    return(compare_auc(cv_results$predictions_ref, cv_results$predictions_new, cv_results$labels))
+  } else {
+    n_vars_base <- length(base_vars)
+    n_vars_new <- length(c(base_vars, candidate_var))
+    return(compare_usmile(cv_results$predictions_ref, cv_results$predictions_new, cv_results$labels, method, n_vars_base, n_vars_new))
+  }
+}
+
+compare_auc <- function(pred_base, pred_new, labels) {
+  tryCatch({
+    auc_base <- as.numeric(pROC::auc(pROC::roc(labels, pred_base, quiet = TRUE)))
+    auc_new <- as.numeric(pROC::auc(pROC::roc(labels, pred_new, quiet = TRUE)))
+    improvement <- auc_new - auc_base
+    
+    roc_base <- pROC::roc(labels, pred_base, quiet = TRUE)
+    roc_new <- pROC::roc(labels, pred_new, quiet = TRUE)
+    delong_test <- pROC::roc.test(roc_base, roc_new, method = "delong", alternative = "less")
+    
+    return(list(improvement = improvement, p_value = delong_test$p.value))
+  }, error = function(e) {
+    return(list(improvement = 0, p_value = 1))
+  })
+}
+
+compare_usmile <- function(pred_base, pred_new, labels, method, n_vars_base, n_vars_new) {
+  tryCatch({
+    comparison_data <- data.frame(
+      y = labels,
+      p_ref = pred_base,
+      p = pred_new
+    )
+    
+    n_vars_diff <- n_vars_new - n_vars_base
+    
+    usmile_results <- UScalc_raw(comparison_data, y_coef = "rLR", n_vars_diff)
+    
+    if (method == "usmile_overall") {
+      improvement <- usmile_results$Y_overall
+      p_value <- usmile_results$p_Y_overall
+    } else if (method == "usmile_event") {
+      improvement <- usmile_results$netto_Y_event
+      p_value <- usmile_results$p_Y_event
+    } else if (method == "usmile_nonev") {
+      improvement <- usmile_results$netto_Y_nonev
+      p_value <- usmile_results$p_Y_nonev
+    } else {
+      improvement <- 0
+      p_value <- 1
+    }
+    
+    return(list(improvement = improvement, p_value = p_value))
+    
+  }, error = function(e) {
+    return(list(improvement = 0, p_value = 1))
+  })
+}
+
+# --------------------------------------------------------------------
+# STEPWISE SELECTION FUNCTIONS (MODIFIED WITH CALIBRATION)
+# --------------------------------------------------------------------
+
+bidirectional_stepwise_selection_calibrated <- function(data, method = "auc", max_vars = 10, 
+                                                       p_value_enter = 0.05, p_value_remove = 0.1) {
+  available_vars <- get_predictor_variables(data)
+  selected_vars <- character(0)
+  improvement <- TRUE
+  iteration <- 0
+  history <- list()
+  
+  cat("=== Method:", toupper(method), "===\n")
+  cat("Entry p-value threshold:", p_value_enter, "| Removal p-value threshold:", p_value_remove, "\n")
+  
+  while (improvement && length(selected_vars) <= max_vars && iteration < 20) {
+    iteration <- iteration + 1
+    improvement <- FALSE
+    cat("Iteration", iteration, "- Current variables:", 
+        if(length(selected_vars) > 0) paste(selected_vars, collapse = ", ") else "none", "\n")
+    
+    # STEP 1: TRY TO ADD A VARIABLE
+    if (length(selected_vars) < max_vars) {
+      candidate_vars <- setdiff(available_vars, selected_vars)
+      
+      if (length(candidate_vars) > 0) {
+        best_forward <- find_best_forward_variable_calibrated(data, selected_vars, candidate_vars, method, p_value_enter)
+        
+        if (!is.null(best_forward$var)) {
+          selected_vars <- c(selected_vars, best_forward$var)
+          cat(">>> ADDED:", best_forward$var, "| p-value:", round(best_forward$p_value, 4), 
+              "| improvement:", round(best_forward$improvement, 4), "\n")
+          improvement <- TRUE
+          
+          history[[length(history) + 1]] <- list(
+            iteration = iteration,
+            action = "ADD",
+            variable = best_forward$var,
+            p_value = best_forward$p_value,
+            improvement = best_forward$improvement,
+            selected_vars = paste(selected_vars, collapse = ", ")
+          )
+          next
+        }
+      }
+    }
+    
+    # STEP 2: TRY TO REMOVE A VARIABLE
+    if (length(selected_vars) >= 1) {
+      worst_backward <- find_worst_backward_variable_calibrated(data, selected_vars, method, p_value_remove)
+      
+      if (!is.null(worst_backward$var)) {
+        selected_vars <- setdiff(selected_vars, worst_backward$var)
+        cat(">>> REMOVED:", worst_backward$var, "| p-value loss:", round(worst_backward$p_value, 4), 
+            "| deterioration:", round(worst_backward$deterioration, 4), "\n")
+        improvement <- TRUE
+        
+        history[[length(history) + 1]] <- list(
+          iteration = iteration,
+          action = "REMOVE",
+          variable = worst_backward$var,
+          p_value = worst_backward$p_value,
+          improvement = -worst_backward$deterioration,
+          selected_vars = paste(selected_vars, collapse = ", ")
+        )
+      }
+    }
+  }
+  
+  cat("Final model - Selected variables:", 
+      if(length(selected_vars) > 0) paste(selected_vars, collapse = ", ") else "none", "\n")
+  cat("Number of variables:", length(selected_vars), "\n")
+  
+  return(list(
+    selected_vars = selected_vars,
+    history = history,
+    iterations = iteration
+  ))
+}
+
+find_best_forward_variable_calibrated <- function(data, base_vars, candidate_vars, method, p_value_threshold) {
+  best_p_value <- 1
+  best_var <- NULL
+  best_improvement <- -Inf
+  
+  for (var in candidate_vars) {
+    comparison <- compare_models_with_cv_calibrated(data, base_vars, var, method)
+    
+    # CORRECTED CONDITION: p-value < threshold AND improvement > 0
+    if (!is.na(comparison$p_value) && comparison$p_value < best_p_value && 
+        !is.na(comparison$improvement) && comparison$improvement > 0) {
+      best_p_value = comparison$p_value
+      best_var = var
+      best_improvement = comparison$improvement
+    }
+  }
+  
+  # CORRECTED CONDITION: only if improvement > 0
+  if (best_p_value < p_value_threshold && !is.na(best_improvement) && best_improvement > 0) {
+    return(list(var = best_var, p_value = best_p_value, improvement = best_improvement))
+  } else {
+    return(list(var = NULL, p_value = best_p_value, improvement = best_improvement))
+  }
+}
+
+find_worst_backward_variable_calibrated <- function(data, current_vars, method, p_value_threshold) {
+  if (length(current_vars) <= 1) {
+    return(list(var = NULL, p_value = NA, deterioration = NA))
+  }
+  
+  worst_p_value <- -1
+  worst_var <- NULL
+  worst_deterioration <- Inf
+  
+  for (var in current_vars) {
+    reduced_vars <- setdiff(current_vars, var)
+    comparison <- compare_models_with_cv_calibrated(data, reduced_vars, var, method)
+    
+    # CORRECTED CONDITION: p-value > threshold AND deterioration < 0 (actual deterioration)
+    if (!is.na(comparison$p_value) && comparison$p_value > worst_p_value && 
+        !is.na(comparison$improvement) && comparison$improvement < 0) {
+      worst_p_value = comparison$p_value
+      worst_var = var
+      worst_deterioration = -comparison$improvement
+    }
+  }
+  
+  # CORRECTED CONDITION: only if deterioration > 0 (acceptable loss)
+  if (!is.na(worst_p_value) && worst_p_value > p_value_threshold && 
+      !is.na(worst_deterioration) && worst_deterioration > 0) {
+    return(list(var = worst_var, p_value = worst_p_value, deterioration = worst_deterioration))
+  } else {
+    return(list(var = NULL, p_value = worst_p_value, deterioration = worst_deterioration))
+  }
+}
+
+# --------------------------------------------------------------------
+# FUNCTIONS FOR COLLECTING TEST PREDICTIONS (MODIFIED)
+# --------------------------------------------------------------------
+
+collect_test_predictions_calibrated <- function(data, selected_vars_history, scenario_name, method_name) {
+  all_predictions <- list()
+  
+  for (step in 1:length(selected_vars_history)) {
+    current_step <- selected_vars_history[[step]]
+    current_vars <- current_step$selected_vars
+    
+    if (current_vars != "" && current_vars != "none") {
+      selected_vars_list <- strsplit(current_vars, ", ")[[1]]
+      
+      if (length(selected_vars_list) > 0) {
+        target_var <- ifelse("Class" %in% names(data), "Class", "disease")
+        formula_current <- as.formula(paste(target_var, "~", paste(selected_vars_list, collapse = " + ")))
+        
+        cv_results <- cross_validate_model_with_calibration(data, formula_current)
+        
+        step_predictions <- data.frame(
+          scenario = scenario_name,
+          method = method_name,
+          step = step,
+          action = current_step$action,
+          variable = current_step$variable,
+          selected_vars = current_vars,
+          n_vars = length(selected_vars_list),
+          observation_id = 1:length(cv_results$predictions_ref),
+          true_label = cv_results$labels,
+          predicted_prob = cv_results$predictions_ref,
+          predicted_prob_raw = cv_results$predictions_ref_raw,
+          fold = cv_results$folds
+        )
+        
+        all_predictions[[step]] <- step_predictions
+      }
+    }
+  }
+  
+  if (length(all_predictions) > 0) {
+    return(do.call(rbind, all_predictions))
+  } else {
+    return(NULL)
+  }
+}
+
+collect_final_predictions_calibrated <- function(final_results, scenarios) {
+  final_predictions_list <- list()
+  
+  for (scenario_name in names(final_results)) {
+    data <- scenarios[[scenario_name]]
+    
+    for (method_name in names(final_results[[scenario_name]])) {
+      result <- final_results[[scenario_name]][[method_name]]
+      selected_vars <- result$selected_vars
+      
+      if (selected_vars != "" && selected_vars != "none") {
+        selected_vars_list <- strsplit(selected_vars, ", ")[[1]]
+        target_var <- ifelse("Class" %in% names(data), "Class", "disease")
+        formula_final <- as.formula(paste(target_var, "~", paste(selected_vars_list, collapse = " + ")))
+        
+        cv_results <- cross_validate_model_with_calibration(data, formula_final)
+        
+        final_pred_df <- data.frame(
+          scenario = scenario_name,
+          method = method_name,
+          selected_vars = selected_vars,
+          n_vars = length(selected_vars_list),
+          observation_id = 1:length(cv_results$predictions_ref),
+          true_label = cv_results$labels,
+          predicted_prob = cv_results$predictions_ref,
+          predicted_prob_raw = cv_results$predictions_ref_raw,
+          fold = cv_results$folds
+        )
+        
+        final_predictions_list[[paste(scenario_name, method_name)]] <- final_pred_df
+      }
+    }
+  }
+  
+  if (length(final_predictions_list) > 0) {
+    return(do.call(rbind, final_predictions_list))
+  } else {
+    return(NULL)
+  }
+}
+
+# --------------------------------------------------------------------
+# FINAL MODEL EVALUATION (MODIFIED WITH I COEFFICIENTS)
+# --------------------------------------------------------------------
+
+evaluate_final_model_calibrated <- function(data, selected_vars, scenario_name, method_name) {
+  target_var <- ifelse("Class" %in% names(data), "Class", "disease")
+  
+  if (length(selected_vars) == 0) {
+    formula_final <- as.formula(paste(target_var, "~ 1"))
+  } else {
+    formula_final <- as.formula(paste(target_var, "~", paste(selected_vars, collapse = " + ")))
+  }
+  
+  cv_results <- cross_validate_model_with_calibration(data, formula_final)
+  
+  auc_value <- NA
+  tryCatch({
+    roc_obj <- pROC::roc(cv_results$labels, cv_results$predictions_ref, quiet = TRUE)
+    auc_value <- as.numeric(pROC::auc(roc_obj))
+  }, error = function(e) {
+    warning(paste("AUC error:", e$message))
+  })
+  
+  auc_pr_value <- calculate_auc_pr(cv_results$predictions_ref, cv_results$labels)
+  cllr_value <- calculate_cllr(cv_results$predictions_ref, cv_results$labels)
+  youden_metrics <- calculate_youden_metrics(cv_results$predictions_ref, cv_results$labels)
+  
+  null_formula <- as.formula(paste(target_var, "~ 1"))
+  null_cv <- cross_validate_model_with_calibration(data, null_formula)
+  n_vars_diff <- length(selected_vars)
+  
+  comparison_data <- data.frame(
+    y = cv_results$labels,
+    p_ref = null_cv$predictions_ref,
+    p = cv_results$predictions_ref
+  )
+  
+  # UPDATED: Extract both Y and I coefficients
+  tryCatch({
+    usmile_coefs <- UScalc_raw(comparison_data, y_coef = "rLR", n_vars_diff)
+    usmile_overall <- usmile_coefs$Y_overall
+    usmile_event <- usmile_coefs$netto_Y_event
+    usmile_nonev <- usmile_coefs$netto_Y_nonev
+    # NEW: I coefficients
+    usmile_I_overall <- usmile_coefs$I_overall
+    usmile_I_event <- usmile_coefs$netto_I_event
+    usmile_I_nonev <- usmile_coefs$netto_I_nonev
+  }, error = function(e) {
+    usmile_overall <- NA
+    usmile_event <- NA
+    usmile_nonev <- NA
+    usmile_I_overall <- NA
+    usmile_I_event <- NA
+    usmile_I_nonev <- NA
+  })
+  
+  return(data.frame(
+    scenario = scenario_name,
+    method = method_name,
+    selected_vars = if(length(selected_vars) > 0) paste(selected_vars, collapse = ", ") else "none",
+    n_vars = length(selected_vars),
+    auc_roc = auc_value,
+    auc_pr = auc_pr_value,
+    cllr = cllr_value,
+    f1_score = youden_metrics$f1_score,
+    sensitivity = youden_metrics$sensitivity,
+    specificity = youden_metrics$specificity,
+    precision = youden_metrics$precision,
+    # Y coefficients
+    usmile_netto_overall = usmile_overall,
+    usmile_netto_event = usmile_event,
+    usmile_netto_nonev = usmile_nonev,
+    # NEW: I coefficients
+    usmile_I_overall = usmile_I_overall,
+    usmile_I_event = usmile_I_event,
+    usmile_I_nonev = usmile_I_nonev,
+    stringsAsFactors = FALSE
+  ))
+}
+
+# --------------------------------------------------------------------
+# MAIN ANALYSIS WITH CALIBRATION FOR ALL 6 SCENARIOS
+# --------------------------------------------------------------------
+
+# SCENARIO DEFINITIONS FOR ALL 6 SCENARIOS
+scenarios <- list(
+  low = data_low_power,
+  medium = data_med_power, 
+  high = data_high_power,
+  imbalanced = data_imbalanced,
+  imbalanced_asym = data_imbalanced_asym,  # NEW: Added asymmetric scenario
+  real_heart = data_real_heart
+)
+
+final_results_calibrated <- list()
+selection_history_calibrated <- list()
+all_test_predictions_calibrated <- list()
+
+for (scenario_name in names(scenarios)) {
+  cat("SCENARIO:", scenario_name, "\n")
+  
+  data <- scenarios[[scenario_name]]
+  scenario_results <- list()
+  scenario_predictions <- list()
+  
+  # Method 1: AUC
+  result_auc <- bidirectional_stepwise_selection_calibrated(data, "auc", p_value_enter = 0.05, p_value_remove = 0.1)
+  eval_auc <- evaluate_final_model_calibrated(data, result_auc$selected_vars, scenario_name, "AUC")
+  scenario_results[["AUC"]] <- eval_auc
+  selection_history_calibrated[[paste(scenario_name, "AUC")]] <- result_auc$history
+  
+  pred_auc <- collect_test_predictions_calibrated(data, result_auc$history, scenario_name, "AUC")
+  if (!is.null(pred_auc)) {
+    scenario_predictions[["AUC"]] <- pred_auc
+  }
+  
+  # Method 2: U-smile Overall
+  result_overall <- bidirectional_stepwise_selection_calibrated(data, "usmile_overall", p_value_enter = 0.05, p_value_remove = 0.1)
+  eval_overall <- evaluate_final_model_calibrated(data, result_overall$selected_vars, scenario_name, "U-smile Overall")
+  scenario_results[["U-smile Overall"]] <- eval_overall
+  selection_history_calibrated[[paste(scenario_name, "U-smile Overall")]] <- result_overall$history
+  
+  pred_overall <- collect_test_predictions_calibrated(data, result_overall$history, scenario_name, "U-smile Overall")
+  if (!is.null(pred_overall)) {
+    scenario_predictions[["U-smile Overall"]] <- pred_overall
+  }
+  
+  # Method 3: U-smile Event
+  result_event <- bidirectional_stepwise_selection_calibrated(data, "usmile_event", p_value_enter = 0.05, p_value_remove = 0.1)
+  eval_event <- evaluate_final_model_calibrated(data, result_event$selected_vars, scenario_name, "U-smile Event")
+  scenario_results[["U-smile Event"]] <- eval_event
+  selection_history_calibrated[[paste(scenario_name, "U-smile Event")]] <- result_event$history
+  
+  pred_event <- collect_test_predictions_calibrated(data, result_event$history, scenario_name, "U-smile Event")
+  if (!is.null(pred_event)) {
+    scenario_predictions[["U-smile Event"]] <- pred_event
+  }
+  
+  # Method 4: U-smile Nonevent
+  result_nonev <- bidirectional_stepwise_selection_calibrated(data, "usmile_nonev", p_value_enter = 0.05, p_value_remove = 0.1)
+  eval_nonev <- evaluate_final_model_calibrated(data, result_nonev$selected_vars, scenario_name, "U-smile Nonevent")
+  scenario_results[["U-smile Nonevent"]] <- eval_nonev
+  selection_history_calibrated[[paste(scenario_name, "U-smile Nonevent")]] <- result_nonev$history
+  
+  pred_nonev <- collect_test_predictions_calibrated(data, result_nonev$history, scenario_name, "U-smile Nonevent")
+  if (!is.null(pred_nonev)) {
+    scenario_predictions[["U-smile Nonevent"]] <- pred_nonev
+  }
+  
+  final_results_calibrated[[scenario_name]] <- scenario_results
+  all_test_predictions_calibrated[[scenario_name]] <- scenario_predictions
+}
+
+# --------------------------------------------------------------------
+# PREPARE DATA FOR EXCEL
+# --------------------------------------------------------------------
+
+# Results summary
+summary_list_calibrated <- list()
+for (scenario_name in names(final_results_calibrated)) {
+  for (method_name in names(final_results_calibrated[[scenario_name]])) {
+    summary_list_calibrated[[paste(scenario_name, method_name)]] <- final_results_calibrated[[scenario_name]][[method_name]]
+  }
+}
+
+final_summary_calibrated <- do.call(rbind, summary_list_calibrated)
+rownames(final_summary_calibrated) <- NULL
+
+# Variable selection precision analysis
+precision_analysis_calibrated <- data.frame()
+
+for (scenario_name in names(scenarios)) {
+  n_informative <- get_n_informative(scenarios[[scenario_name]])
+  
+  if (scenario_name != "real_heart") {
+    true_vars <- paste0("V", 1:n_informative)
+  } else {
+    true_vars <- get_predictor_variables(scenarios[[scenario_name]])
+  }
+  
+  scenario_data <- final_summary_calibrated[final_summary_calibrated$scenario == scenario_name, ]
+  
+  for (i in 1:nrow(scenario_data)) {
+    method_name <- scenario_data$method[i]
+    selected_vars_str <- scenario_data$selected_vars[i]
+    
+    if (selected_vars_str != "" && selected_vars_str != "none") {
+      selected_vars_list <- strsplit(selected_vars_str, ", ")[[1]]
+      correct_vars <- sum(selected_vars_list %in% true_vars)
+      precision <- correct_vars / length(selected_vars_list)
+      recall <- correct_vars / length(true_vars)
+      f1_measure <- ifelse((precision + recall) > 0, 
+                           round(2 * precision * recall / (precision + recall), 3), 0)
+    } else {
+      precision <- 0
+      recall <- 0
+      f1_measure <- 0
+    }
+    
+    precision_analysis_calibrated <- rbind(precision_analysis_calibrated, data.frame(
+      scenario = scenario_name,
+      method = method_name,
+      true_informative_vars = paste(true_vars, collapse = ", "),
+      selected_vars = selected_vars_str,
+      n_selected = ifelse(selected_vars_str != "" && selected_vars_str != "none", 
+                         length(strsplit(selected_vars_str, ", ")[[1]]), 0),
+      n_correct = correct_vars,
+      precision = round(precision, 3),
+      recall = round(recall, 3),
+      f1_measure = f1_measure,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+# Selection history
+history_df_calibrated <- data.frame()
+for (history_name in names(selection_history_calibrated)) {
+  history_data <- selection_history_calibrated[[history_name]]
+  if (length(history_data) > 0) {
+    for (i in 1:length(history_data)) {
+      step <- history_data[[i]]
+      history_df_calibrated <- rbind(history_df_calibrated, data.frame(
+        scenario_method = history_name,
+        iteration = step$iteration,
+        action = step$action,
+        variable = step$variable,
+        p_value = step$p_value,
+        improvement = step$improvement,
+        selected_vars = step$selected_vars,
+        stringsAsFactors = FALSE
+      ))
+    }
+  }
+}
+
+# Process predictions
+process_predictions_list_calibrated <- list()
+for (scenario_name in names(all_test_predictions_calibrated)) {
+  for (method_name in names(all_test_predictions_calibrated[[scenario_name]])) {
+    process_predictions_list_calibrated[[paste(scenario_name, method_name)]] <- all_test_predictions_calibrated[[scenario_name]][[method_name]]
+  }
+}
+
+if (length(process_predictions_list_calibrated) > 0) {
+  process_predictions_calibrated <- do.call(rbind, process_predictions_list_calibrated)
+} else {
+  process_predictions_calibrated <- data.frame()
+}
+
+# Final model predictions
+final_predictions_calibrated <- collect_final_predictions_calibrated(final_results_calibrated, scenarios)
+
+# --------------------------------------------------------------------
+# SAVE TO EXCEL WITH NEW NAMES
+# --------------------------------------------------------------------
+
+excel_data_calibrated <- list(
+  "Results_Summary" = final_summary_calibrated,
+  "Variable_Selection_Precision" = precision_analysis_calibrated,
+  "Selection_History" = history_df_calibrated
+)
+
+if (nrow(process_predictions_calibrated) > 0) {
+  excel_data_calibrated[["Process_Predictions"]] <- process_predictions_calibrated
+}
+
+if (!is.null(final_predictions_calibrated) && nrow(final_predictions_calibrated) > 0) {
+  excel_data_calibrated[["Final_Model_Predictions"]] <- final_predictions_calibrated
+}
+
+
+write_xlsx(excel_data_calibrated, path = "selection_steps_GLM.xlsx")
+
+# --------------------------------------------------------------------
+# ADDITIONAL SAVE WITH NEW NAMES
+# --------------------------------------------------------------------
+
+selection_steps_GLM_results <- final_results_calibrated
+selection_steps_GLM_summary <- final_summary_calibrated
+selection_steps_GLM_precision <- precision_analysis_calibrated
+selection_steps_GLM_history <- selection_history_calibrated
+selection_steps_GLM_process_pred <- process_predictions_calibrated
+selection_steps_GLM_final_pred <- final_predictions_calibrated
+save(selection_steps_GLM_results, selection_steps_GLM_summary, selection_steps_GLM_precision, 
+     selection_steps_GLM_history, selection_steps_GLM_process_pred, selection_steps_GLM_final_pred, 
+     scenarios, file = "selection_steps_GLM.RData")
+
+# --------------------------------------------------------------------
+# SUMMARY
+# --------------------------------------------------------------------
+
+cat("STEPWISE SELECTION ANALYSIS WITH CALIBRATION COMPLETED!\n")
+cat("Results saved in files:\n")
+cat("- selection_steps_GLM.xlsx\n")
+cat("- selection_steps_GLM.RData\n")
+
+```
+
+## RF (random forest) Forward Selection based on effect size
+
+```{r}
+# --------------------------------------------------------------------
+# COMPLETE RANDOM FOREST FORWARD SELECTION WITH EFFECT SIZE THRESHOLD
+# --------------------------------------------------------------------
+
+# Load required packages
+if (!require(randomForest)) {
+  install.packages("randomForest")
+  library(randomForest)
+}
+
+if (!require(pROC)) {
+  install.packages("pROC")
+  library(pROC)
+}
+
+if (!require(PRROC)) {
+  install.packages("PRROC")
+  library(PRROC)
+}
+
+if (!require(writexl)) {
+  install.packages("writexl")
+  library(writexl)
+}
+
+if (!require(Usmile)) {
+  install.packages("Usmile")
+  library(Usmile)
+}
+
+# --------------------------------------------------------------------
+# HELPER FUNCTIONS
+# --------------------------------------------------------------------
+
+get_predictor_variables <- function(data) {
+  if ("Class" %in% names(data) && any(grepl("^V[0-9]+$", names(data)))) {
+    return(paste0("V", 1:10))
+  }
+  if ("disease" %in% names(data)) {
+    predictor_vars <- setdiff(names(data), "disease")
+    return(predictor_vars)
+  }
+  return(paste0("V", 1:10))
+}
+
+calculate_auc_pr <- function(predictions, labels) {
+  tryCatch({
+    if (length(unique(labels)) < 2) {
+      return(NA)
+    }
+    if (!is.numeric(labels)) {
+      labels <- as.numeric(as.factor(labels)) - 1
+    }
+    labels <- as.integer(labels)
+    pr_curve <- pr.curve(scores.class0 = predictions[labels == 1],
+                         scores.class1 = predictions[labels == 0],
+                         curve = TRUE)
+    return(pr_curve$auc.integral)
+  }, error = function(e) {
+    return(NA)
+  })
+}
+
+calculate_cllr <- function(scores, labels) {
+  scores <- pmin(pmax(scores, 1e-6), 1 - 1e-6)
+  
+  true_cases <- as.logical(labels)
+  false_cases <- !true_cases
+  
+  costs_true <- -log2(scores[true_cases])
+  costs_false <- -log2(1 - scores[false_cases])
+  
+  cllr <- (sum(costs_true) + sum(costs_false)) / length(scores)
+  
+  return(cllr)
+}
+
+calculate_youden_metrics <- function(predictions, labels) {
+  tryCatch({
+    roc_obj <- pROC::roc(labels, predictions, quiet = TRUE)
+    youden_index <- which.max(roc_obj$sensitivities + roc_obj$specificities - 1)
+    youden_threshold <- roc_obj$thresholds[youden_index]
+    binary_preds <- ifelse(predictions >= youden_threshold, 1, 0)
+    
+    TP <- sum(binary_preds == 1 & labels == 1)
+    TN <- sum(binary_preds == 0 & labels == 0)
+    FP <- sum(binary_preds == 1 & labels == 0)
+    FN <- sum(binary_preds == 0 & labels == 1)
+    
+    sensitivity <- ifelse((TP + FN) > 0, TP / (TP + FN), 0)
+    specificity <- ifelse((TN + FP) > 0, TN / (TN + FP), 0)
+    precision <- ifelse((TP + FP) > 0, TP / (TP + FP), 0)
+    f1_score <- ifelse((precision + sensitivity) > 0, 
+                       2 * (precision * sensitivity) / (precision + sensitivity), 0)
+    
+    return(list(
+      sensitivity = sensitivity,
+      specificity = specificity,
+      precision = precision,
+      f1_score = f1_score
+    ))
+  }, error = function(e) {
+    return(list(
+      sensitivity = NA,
+      specificity = NA,
+      precision = NA,
+      f1_score = NA
+    ))
+  })
+}
+
+# --------------------------------------------------------------------
+# CROSS-VALIDATION AND MODEL COMPARISON FUNCTIONS
+# --------------------------------------------------------------------
+
+cross_validate_rf_with_calibration <- function(data, selected_vars_ref, selected_vars_new = NULL, n_folds = 10) {
+  set.seed(123)
+  
+  target_var <- ifelse("Class" %in% names(data), "Class", "disease")
+  data[[target_var]] <- as.factor(data[[target_var]])
+  
+  n <- nrow(data)
+  folds <- sample(rep(1:n_folds, length.out = n))
+  
+  all_predictions_ref <- numeric(n)
+  all_predictions_new <- numeric(n)
+  all_labels <- numeric(n)
+  fold_assignments <- numeric(n)
+  
+  for (fold in 1:n_folds) {
+    train_indices <- which(folds != fold)
+    test_indices <- which(folds == fold)
+    
+    train_data <- data[train_indices, ]
+    test_data <- data[test_indices, ]
+    
+    if (length(selected_vars_ref) == 0) {
+      ref_prob <- mean(as.numeric(train_data[[target_var]]) - 1)
+      all_predictions_ref[test_indices] <- rep(ref_prob, length(test_indices))
+    } else {
+      formula_ref <- as.formula(paste(target_var, "~", paste(selected_vars_ref, collapse = " + ")))
+      rf_ref <- randomForest(formula_ref, data = train_data, ntree = 250)
+      all_predictions_ref[test_indices] <- predict(rf_ref, newdata = test_data, type = "prob")[, 2]
+    }
+    
+    if (!is.null(selected_vars_new)) {
+      formula_new <- as.formula(paste(target_var, "~", paste(selected_vars_new, collapse = " + ")))
+      rf_new <- randomForest(formula_new, data = train_data, ntree = 250)
+      all_predictions_new[test_indices] <- predict(rf_new, newdata = test_data, type = "prob")[, 2]
+    }
+    
+    fold_assignments[test_indices] <- fold
+    all_labels[test_indices] <- as.numeric(test_data[[target_var]]) - 1
+  }
+  
+  if (!is.null(selected_vars_new)) {
+    if (length(selected_vars_ref) > 0) {
+      calibration_ref <- glm(all_labels ~ all_predictions_ref, family = binomial)
+      all_predictions_ref_calibrated <- predict(calibration_ref, type = "response")
+    } else {
+      all_predictions_ref_calibrated <- all_predictions_ref
+    }
+    
+    calibration_new <- glm(all_labels ~ all_predictions_new, family = binomial)
+    all_predictions_new_calibrated <- predict(calibration_new, type = "response")
+    
+    return(list(
+      predictions_ref = all_predictions_ref_calibrated,
+      predictions_new = all_predictions_new_calibrated,
+      labels = all_labels,
+      folds = fold_assignments,
+      predictions_ref_raw = all_predictions_ref,
+      predictions_new_raw = all_predictions_new
+    ))
+  } else {
+    if (length(selected_vars_ref) > 0) {
+      calibration_ref <- glm(all_labels ~ all_predictions_ref, family = binomial)
+      all_predictions_ref_calibrated <- predict(calibration_ref, type = "response")
+    } else {
+      all_predictions_ref_calibrated <- all_predictions_ref
+    }
+    
+    return(list(
+      predictions_ref = all_predictions_ref_calibrated,
+      labels = all_labels,
+      folds = fold_assignments,
+      predictions_ref_raw = all_predictions_ref
+    ))
+  }
+}
+
+compare_rf_models_with_cv_calibrated <- function(data, base_vars, candidate_var, method = "auc", n_folds = 10) {
+  if (length(base_vars) > 0) {
+    selected_vars_ref <- base_vars
+  } else {
+    selected_vars_ref <- character(0)
+  }
+  
+  selected_vars_new <- c(base_vars, candidate_var)
+  
+  cv_results <- cross_validate_rf_with_calibration(data, selected_vars_ref, selected_vars_new, n_folds)
+  
+  if (method == "auc") {
+    return(compare_auc_rf_original(cv_results$predictions_ref, cv_results$predictions_new, cv_results$labels))
+  } else {
+    n_vars_base <- length(base_vars)
+    n_vars_new <- length(c(base_vars, candidate_var))
+    return(compare_usmile_rf_original(cv_results$predictions_ref, cv_results$predictions_new, cv_results$labels, method, n_vars_base, n_vars_new))
+  }
+}
+
+compare_auc_rf_original <- function(pred_base, pred_new, labels) {
+  tryCatch({
+    auc_base <- as.numeric(pROC::auc(pROC::roc(labels, pred_base, quiet = TRUE)))
+    auc_new <- as.numeric(pROC::auc(pROC::roc(labels, pred_new, quiet = TRUE)))
+    improvement <- auc_new - auc_base
+    
+    percentage_improvement <- ifelse(auc_base > 0, (improvement / auc_base) * 100, 0)
+    
+    return(list(
+      improvement = improvement,
+      percentage_improvement = percentage_improvement,
+      base_value = auc_base,
+      new_value = auc_new
+    ))
+  }, error = function(e) {
+    return(list(improvement = 0, percentage_improvement = 0, base_value = 0, new_value = 0))
+  })
+}
+
+compare_usmile_rf_original <- function(pred_base, pred_new, labels, method, n_vars_base, n_vars_new) {
+  tryCatch({
+    comparison_data <- data.frame(
+      y = labels,
+      p_ref = pred_base,
+      p = pred_new
+    )
+    
+    n_vars_diff <- n_vars_new - n_vars_base
+    
+    usmile_results <- UScalc_raw(comparison_data, y_coef = "rLR", n_vars_diff)
+    
+    if (method == "usmile_overall") {
+      absolute_improvement <- usmile_results$Y_overall
+    } else if (method == "usmile_event") {
+      absolute_improvement <- usmile_results$netto_Y_event
+    } else if (method == "usmile_nonev") {
+      absolute_improvement <- usmile_results$netto_Y_nonev
+    } else {
+      absolute_improvement <- 0
+    }
+    
+    percentage_improvement <- absolute_improvement * 100
+    
+    return(list(
+      improvement = absolute_improvement,
+      percentage_improvement = percentage_improvement,
+      base_value = 0,
+      new_value = absolute_improvement
+    ))
+  }, error = function(e) {
+    return(list(improvement = 0, percentage_improvement = 0, base_value = 0, new_value = 0))
+  })
+}
+
+# --------------------------------------------------------------------
+# FORWARD SELECTION FUNCTIONS WITH EFFECT SIZE THRESHOLD
+# --------------------------------------------------------------------
+
+get_base_performance <- function(data, method) {
+  return(0)
+}
+
+forward_selection_rf_effect_size <- function(data, method = "auc", max_vars = 10, effect_size_threshold = 2) {
+  all_vars <- get_predictor_variables(data)
+  selected_vars <- character(0)
+  iteration <- 0
+  history <- list()
+  
+  cat("=== RANDOM FOREST Forward Selection - Method:", toupper(method), "===\n")
+  cat("Effect size threshold:", effect_size_threshold, "% improvement\n")
+  cat("Starting with empty model\n")
+  
+  improvement <- TRUE
+  base_performance <- get_base_performance(data, method)
+  
+  while (improvement && length(selected_vars) < max_vars && iteration < 15) {
+    iteration <- iteration + 1
+    improvement <- FALSE
+    
+    cat("Iteration", iteration, "- Current variables:", 
+        if(length(selected_vars) > 0) paste(selected_vars, collapse = ", ") else "none", "\n")
+    
+    best_addition <- find_best_variable_by_effect_size(data, selected_vars, all_vars, method, effect_size_threshold, base_performance)
+    
+    if (!is.null(best_addition$var)) {
+      selected_vars <- c(selected_vars, best_addition$var)
+      cat(">>> ADDED:", best_addition$var, "| Improvement:", round(best_addition$improvement, 4), 
+          "| Percentage:", round(best_addition$percentage_improvement, 2), "%\n")
+      improvement = TRUE
+      
+      history[[length(history) + 1]] <- list(
+        iteration = iteration,
+        action = "ADD",
+        variable = best_addition$var,
+        improvement = best_addition$improvement,
+        percentage_improvement = best_addition$percentage_improvement,
+        base_value = best_addition$base_value,
+        new_value = best_addition$new_value,
+        selected_vars = paste(selected_vars, collapse = ", ")
+      )
+    } else {
+      cat(">>> No variable provides sufficient improvement (≥", effect_size_threshold, "%)\n")
+    }
+  }
+  
+  cat("Final RF model - Selected variables (", length(selected_vars), "):", 
+      if(length(selected_vars) > 0) paste(selected_vars, collapse = ", ") else "none", "\n")
+  
+  return(list(
+    selected_vars = selected_vars,
+    history = history,
+    iterations = iteration
+  ))
+}
+
+find_best_variable_by_effect_size <- function(data, base_vars, candidate_vars, method, effect_size_threshold, base_performance) {
+  best_improvement <- -Inf
+  best_var <- NULL
+  best_percentage_improvement <- 0
+  best_base_value <- 0
+  best_new_value <- 0
+  
+  for (var in candidate_vars) {
+    comparison <- compare_rf_models_with_cv_calibrated(data, base_vars, var, method)
+    
+    if (!is.na(comparison$percentage_improvement) && 
+        comparison$percentage_improvement > best_improvement &&
+        comparison$percentage_improvement >= effect_size_threshold) {
+      best_improvement <- comparison$percentage_improvement
+      best_var <- var
+      best_percentage_improvement <- comparison$percentage_improvement
+      best_base_value <- comparison$base_value
+      best_new_value <- comparison$new_value
+    }
+  }
+  
+  if (!is.null(best_var)) {
+    return(list(
+      var = best_var,
+      improvement = best_new_value - best_base_value,
+      percentage_improvement = best_percentage_improvement,
+      base_value = best_base_value,
+      new_value = best_new_value
+    ))
+  } else {
+    return(list(var = NULL))
+  }
+}
+
+# --------------------------------------------------------------------
+# FINAL MODEL EVALUATION FUNCTION
+# --------------------------------------------------------------------
+
+evaluate_final_model_rf_calibrated <- function(data, selected_vars, scenario_name, method_name) {
+  target_var <- ifelse("Class" %in% names(data), "Class", "disease")
+  
+  data[[target_var]] <- as.factor(data[[target_var]])
+  
+  if (length(selected_vars) == 0) {
+    selected_vars_ref <- character(0)
+  } else {
+    selected_vars_ref <- selected_vars
+  }
+  
+  cv_results <- cross_validate_rf_with_calibration(data, selected_vars_ref)
+  
+  auc_value <- NA
+  tryCatch({
+    roc_obj <- pROC::roc(cv_results$labels, cv_results$predictions_ref, quiet = TRUE)
+    auc_value <- as.numeric(pROC::auc(roc_obj))
+  }, error = function(e) {
+    warning(paste("AUC error:", e$message))
+  })
+  
+  auc_pr_value <- calculate_auc_pr(cv_results$predictions_ref, cv_results$labels)
+  cllr_value <- calculate_cllr(cv_results$predictions_ref, cv_results$labels)
+  youden_metrics <- calculate_youden_metrics(cv_results$predictions_ref, cv_results$labels)
+  
+  null_cv <- cross_validate_rf_with_calibration(data, character(0))
+  n_vars_diff <- length(selected_vars)
+  
+  comparison_data <- data.frame(
+    y = cv_results$labels,
+    p_ref = null_cv$predictions_ref,
+    p = cv_results$predictions_ref
+  )
+  
+  tryCatch({
+    usmile_coefs <- UScalc_raw(comparison_data, y_coef = "rLR", n_vars_diff)
+    usmile_overall <- usmile_coefs$Y_overall
+    usmile_event <- usmile_coefs$netto_Y_event
+    usmile_nonev <- usmile_coefs$netto_Y_nonev
+    usmile_I_overall <- usmile_coefs$I_overall
+    usmile_I_event <- usmile_coefs$netto_I_event
+    usmile_I_nonev <- usmile_coefs$netto_I_nonev
+  }, error = function(e) {
+    usmile_overall <- NA
+    usmile_event <- NA
+    usmile_nonev <- NA
+    usmile_I_overall <- NA
+    usmile_I_event <- NA
+    usmile_I_nonev <- NA
+  })
+  
+  return(data.frame(
+    scenario = scenario_name,
+    method = method_name,
+    selected_vars = if(length(selected_vars) > 0) paste(selected_vars, collapse = ", ") else "none",
+    n_vars = length(selected_vars),
+    auc_roc = auc_value,
+    auc_pr = auc_pr_value,
+    cllr = cllr_value,
+    f1_score = youden_metrics$f1_score,
+    sensitivity = youden_metrics$sensitivity,
+    specificity = youden_metrics$specificity,
+    precision = youden_metrics$precision,
+    usmile_netto_overall = usmile_overall,
+    usmile_netto_event = usmile_event,
+    usmile_netto_nonev = usmile_nonev,
+    usmile_I_overall = usmile_I_overall,
+    usmile_I_event = usmile_I_event,
+    usmile_I_nonev = usmile_I_nonev,
+    stringsAsFactors = FALSE
+  ))
+}
+
+# --------------------------------------------------------------------
+# MAIN ANALYSIS
+# --------------------------------------------------------------------
+
+load("classification_datasets.RData")
+
+scenarios <- list(
+  low = data_low_power,
+  medium = data_med_power, 
+  high = data_high_power,
+  imbalanced = data_imbalanced,
+  imbalanced_asym = data_imbalanced_asym,
+  real_heart = data_real_heart
+)
+
+selection_steps_RF_results <- list()
+selection_steps_RF_history <- list()
+
+cat("STARTING RANDOM FOREST FORWARD SELECTION (2% THRESHOLD)\n")
+cat("==================================================\n")
+cat("Scenarios: low, medium, high, imbalanced, imbalanced_asym, real_heart\n")
+cat("Methods: AUC, U-smile Overall, U-smile Event, U-smile Nonevent\n")
+cat("Effect size threshold: 2% improvement required\n")
+cat("==================================================\n")
+
+for (scenario_name in names(scenarios)) {
+  cat("\nSCENARIO:", scenario_name, "\n")
+  cat("==================================================\n")
+  
+  data <- scenarios[[scenario_name]]
+  scenario_results <- list()
+  
+  cat("Method: AUC (2% improvement threshold)\n")
+  result_auc <- forward_selection_rf_effect_size(data, "auc", effect_size_threshold = 2)
+  eval_auc <- evaluate_final_model_rf_calibrated(data, result_auc$selected_vars, scenario_name, "AUC")
+  scenario_results[["AUC"]] <- eval_auc
+  selection_steps_RF_history[[paste(scenario_name, "AUC")]] <- result_auc$history
+  
+  cat("Method: U-smile Overall (2% improvement threshold)\n")
+  result_overall <- forward_selection_rf_effect_size(data, "usmile_overall", effect_size_threshold = 2)
+  eval_overall <- evaluate_final_model_rf_calibrated(data, result_overall$selected_vars, scenario_name, "U-smile Overall")
+  scenario_results[["U-smile Overall"]] <- eval_overall
+  selection_steps_RF_history[[paste(scenario_name, "U-smile Overall")]] <- result_overall$history
+  
+  cat("Method: U-smile Event (2% improvement threshold)\n")
+  result_event <- forward_selection_rf_effect_size(data, "usmile_event", effect_size_threshold = 2)
+  eval_event <- evaluate_final_model_rf_calibrated(data, result_event$selected_vars, scenario_name, "U-smile Event")
+  scenario_results[["U-smile Event"]] <- eval_event
+  selection_steps_RF_history[[paste(scenario_name, "U-smile Event")]] <- result_event$history
+  
+  cat("Method: U-smile Nonevent (2% improvement threshold)\n")
+  result_nonev <- forward_selection_rf_effect_size(data, "usmile_nonev", effect_size_threshold = 2)
+  eval_nonev <- evaluate_final_model_rf_calibrated(data, result_nonev$selected_vars, scenario_name, "U-smile Nonevent")
+  scenario_results[["U-smile Nonevent"]] <- eval_nonev
+  selection_steps_RF_history[[paste(scenario_name, "U-smile Nonevent")]] <- result_nonev$history
+  
+  selection_steps_RF_results[[scenario_name]] <- scenario_results
+  
+  cat("Completed scenario:", scenario_name, "\n")
+  cat("Selected variables by method:\n")
+  for (method in names(scenario_results)) {
+    cat("  ", method, ":", scenario_results[[method]]$selected_vars, "\n")
+  }
+}
+
+# --------------------------------------------------------------------
+# RESULTS PROCESSING AND SAVING
+# --------------------------------------------------------------------
+
+selection_steps_RF_summary <- list()
+for (scenario_name in names(selection_steps_RF_results)) {
+  for (method_name in names(selection_steps_RF_results[[scenario_name]])) {
+    selection_steps_RF_summary[[paste(scenario_name, method_name)]] <- 
+      selection_steps_RF_results[[scenario_name]][[method_name]]
+  }
+}
+
+selection_steps_RF_summary_df <- do.call(rbind, selection_steps_RF_summary)
+rownames(selection_steps_RF_summary_df) <- NULL
+
+selection_steps_RF_precision <- data.frame()
+
+for (scenario_name in names(scenarios)) {
+  if (scenario_name == "low") {
+    true_vars <- c("V1", "V2")
+  } else if (scenario_name == "medium") {
+    true_vars <- c("V1", "V2", "V3", "V4", "V5")
+  } else if (scenario_name == "high") {
+    true_vars <- c("V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8")
+  } else if (scenario_name %in% c("imbalanced", "imbalanced_asym")) {
+    true_vars <- c("V1", "V2", "V3", "V4", "V5")
+  } else if (scenario_name == "real_heart") {
+    true_vars <- c("age", "sex", "cp", "bp", "chol", "glu", "ecg", "hr", "exang", "stde")
+  }
+  
+  scenario_data <- selection_steps_RF_summary_df[selection_steps_RF_summary_df$scenario == scenario_name, ]
+  
+  for (i in 1:nrow(scenario_data)) {
+    method_name <- scenario_data$method[i]
+    selected_vars_str <- scenario_data$selected_vars[i]
+    
+    if (selected_vars_str != "" && selected_vars_str != "none") {
+      selected_vars_list <- strsplit(selected_vars_str, ", ")[[1]]
+      correct_vars <- sum(selected_vars_list %in% true_vars)
+      precision <- correct_vars / length(selected_vars_list)
+      recall <- correct_vars / length(true_vars)
+      f1_measure <- ifelse((precision + recall) > 0, 
+                           round(2 * precision * recall / (precision + recall), 3), 0)
+    } else {
+      precision <- 0
+      recall <- 0
+      f1_measure <- 0
+    }
+    
+    selection_steps_RF_precision <- rbind(selection_steps_RF_precision, data.frame(
+      scenario = scenario_name,
+      method = method_name,
+      true_informative_vars = paste(true_vars, collapse = ", "),
+      selected_vars = selected_vars_str,
+      n_selected = ifelse(selected_vars_str != "" && selected_vars_str != "none", 
+                         length(strsplit(selected_vars_str, ", ")[[1]]), 0),
+      n_correct = correct_vars,
+      precision = round(precision, 3),
+      recall = round(recall, 3),
+      f1_measure = f1_measure,
+      stringsAsFactors = FALSE
+    ))
+  }
+}
+
+selection_steps_RF_history_df <- data.frame()
+for (history_name in names(selection_steps_RF_history)) {
+  history_data <- selection_steps_RF_history[[history_name]]
+  if (length(history_data) > 0) {
+    for (i in 1:length(history_data)) {
+      step <- history_data[[i]]
+      selection_steps_RF_history_df <- rbind(selection_steps_RF_history_df, data.frame(
+        scenario_method = history_name,
+        iteration = step$iteration,
+        action = step$action,
+        variable = step$variable,
+        improvement = step$improvement,
+        percentage_improvement = step$percentage_improvement,
+        base_value = step$base_value,
+        new_value = step$new_value,
+        selected_vars = step$selected_vars,
+        stringsAsFactors = FALSE
+      ))
+    }
+  }
+}
+
+excel_data <- list(
+  "Results_Summary" = selection_steps_RF_summary_df,
+  "Variable_Selection_Precision" = selection_steps_RF_precision,
+  "Selection_History" = selection_steps_RF_history_df
+)
+
+write_xlsx(excel_data, path = "selection_steps_RF.xlsx")
+
+save(selection_steps_RF_results, selection_steps_RF_summary_df, selection_steps_RF_precision, 
+     selection_steps_RF_history, selection_steps_RF_history_df, scenarios,
+     file = "selection_steps_RF.RData")
+
+cat("\nRANDOM FOREST FORWARD SELECTION COMPLETED!\n")
+cat("Results saved to selection_steps_RF.xlsx and selection_steps_RF.RData\n")
+
+```
+
+## Visualization matrix for logistic regressionand random forest
+
+```{r}
+# -------------------------------------------------------------------
+# COMPLETE MATRIX PLOTS FOR U-SMILE, ROC AND PR
+# -------------------------------------------------------------------
+
+create_complete_matrix_plots_calibrated <- function(scenario_number, method_number, model_type = "logistic regression", reference_type = "empty",
+                                                   plot_width = 20, plot_height = 18, 
+                                                   save_plot = TRUE, 
+                                                   file_format = "png", 
+                                                   dpi = 300,
+                                                   compression = "lzw") {
+  
+  if (!require(ggplot2)) {
+    install.packages("ggplot2")
+    library(ggplot2)
+  }
+  if (!require(patchwork)) {
+    install.packages("patchwork")
+    library(patchwork)
+  }
+  if (!require(pROC)) {
+    install.packages("pROC")
+    library(pROC)
+  }
+  if (!require(PRROC)) {
+    install.packages("PRROC")
+    library(PRROC)
+  }
+  if (!require(Usmile)) {
+    install.packages("Usmile")
+    library(Usmile)
+  }
+  
+  scenario_names <- c("low", "medium", "high", "imbalanced", "imbalanced_asym", "real_heart")
+  method_names <- c("AUC", "U-smile Overall", "U-smile Event", "U-smile Nonevent")
+  
+  if (scenario_number < 1 | scenario_number > length(scenario_names)) {
+    stop("Invalid scenario number. Available: 1-6")
+  }
+  
+  if (method_number < 1 | method_number > length(method_names)) {
+    stop("Invalid method number. Available: 1-4")
+  }
+  
+  if (!model_type %in% c("logistic regression", "random forest")) {
+    stop("Invalid model type. Available: logistic regression, random forest")
+  }
+  
+  if (!file_format %in% c("png", "tiff", "jpg", "pdf")) {
+    stop("Invalid file format. Available: png, tiff, jpg, pdf")
+  }
+  
+  scenario_name <- scenario_names[scenario_number]
+  method_name <- method_names[method_number]
+  
+  cat("Creating complete matrix plots for:\n")
+  cat("Model:", model_type, "\n")
+  cat("Scenario:", scenario_name, "(number", scenario_number, ")\n")
+  cat("Method:", method_name, "(number", method_number, ")\n")
+  cat("Reference:", ifelse(reference_type == "empty", "empty model", "previous model"), "\n")
+  if (save_plot) {
+    cat("Output:", file_format, "format,", dpi, "DPI,", plot_width, "x", plot_height, "cm\n")
+  }
+  
+  if (!exists("scenarios")) {
+    stop("Scenarios data not found. Please load classification datasets first.")
+  }
+  
+  data <- scenarios[[scenario_name]]
+  history_key <- paste(scenario_name, method_name)
+  
+  if (model_type == "logistic regression") {
+    if (exists("selection_steps_GLM_history")) {
+      selection_history <- selection_steps_GLM_history[[history_key]]
+    } else {
+      stop("logistic regression selection history not found. Run logistic regression selection first.")
+    }
+  } else if (model_type == "random forest") {
+    if (exists("selection_steps_RF_history")) {
+      selection_history <- selection_steps_RF_history[[history_key]]
+    } else {
+      stop("random forest selection history not found. Run random forest selection first.")
+    }
+  }
+  
+  if (is.null(selection_history)) {
+    stop("No selection history for chosen scenario and method combination")
+  }
+  
+  cat("Number of steps in history:", length(selection_history), "\n")
+  
+  step_data_list <- prepare_stepwise_data_with_cv_calibrated(data, selection_history, scenario_name, method_name, reference_type, model_type)
+  
+  if (length(step_data_list) == 0) {
+    stop("No step-by-step data")
+  }
+  
+  usmile_plots <- list()
+  roc_plots <- list()
+  pr_plots <- list()
+  
+  for (i in 1:length(step_data_list)) {
+    step_data <- step_data_list[[i]]
+    cat("Creating plots for step", i, "...\n")
+    
+    usmile_plot <- create_usmile_plot_improved_labels(step_data, i, method_name, reference_type, selection_history, model_type)
+    usmile_plots[[i]] <- usmile_plot
+    
+    roc_plot <- create_roc_matrix_plot(step_data, i, method_name, reference_type, selection_history, model_type)
+    roc_plots[[i]] <- roc_plot
+    
+    pr_plot <- create_pr_matrix_plot(step_data, i, method_name, reference_type, selection_history, model_type)
+    pr_plots[[i]] <- pr_plot
+  }
+  
+  n_plots <- length(usmile_plots)
+  
+  usmile_matrix <- wrap_plots(usmile_plots, ncol = n_plots, nrow = 1) +
+    plot_annotation(
+      title = paste0("U-smile Matrix: ", scenario_name, " - ", method_name),
+      subtitle = paste0("Reference: ", ifelse(reference_type == "empty", "empty model", "previous model"),
+                       " | Steps: ", n_plots),
+      theme = theme(
+        plot.title = element_text(size = 12, hjust = 0.5),
+        plot.subtitle = element_text(size = 12, hjust = 0.5)
+      )
+    )
+  
+  roc_matrix <- wrap_plots(roc_plots, ncol = n_plots, nrow = 1)
+  
+  pr_matrix <- wrap_plots(pr_plots, ncol = n_plots, nrow = 1)
+  
+  complete_matrix <- usmile_matrix / roc_matrix / pr_matrix +
+    plot_annotation(
+      title = paste0("Stepwise selection of variables for the ", model_type, " model: ", scenario_name, " - ", method_name),
+      theme = theme(
+        plot.title = element_text(size = 12, hjust = 0.5)
+      )
+    )
+  
+  print(complete_matrix)
+  
+  saved_files <- list()
+  
+  if (save_plot) {
+    base_filename <- paste0(model_type, "_", scenario_name, "_", gsub(" ", "_", method_name), "_", reference_type)
+    
+    complete_filename <- paste0("complete_matrix_", base_filename, ".", file_format)
+    
+    if (file_format == "tiff") {
+      ggsave(complete_filename, complete_matrix, 
+             width = plot_width, height = plot_height, dpi = dpi,
+             device = "tiff", compression = compression)
+    } else if (file_format == "png") {
+      ggsave(complete_filename, complete_matrix, 
+             width = plot_width, height = plot_height, dpi = dpi,
+             device = "png")
+    } else if (file_format == "jpg") {
+      ggsave(complete_filename, complete_matrix, 
+             width = plot_width, height = plot_height, dpi = dpi,
+             device = "jpeg")
+    } else if (file_format == "pdf") {
+      ggsave(complete_filename, complete_matrix, 
+             width = plot_width, height = plot_height,
+             device = "pdf")
+    }
+    
+    cat("Complete matrix plot saved as:", complete_filename, "\n")
+    saved_files$complete_matrix <- complete_filename
+    
+    individual_matrices <- list(
+      usmile_matrix = usmile_matrix,
+      roc_matrix = roc_matrix,
+      pr_matrix = pr_matrix
+    )
+    
+    matrix_names <- c("usmile_matrix", "roc_matrix", "pr_matrix")
+    individual_heights <- c(6, 6, 6)
+    
+    for (i in 1:length(matrix_names)) {
+      matrix_filename <- paste0(matrix_names[i], "_", base_filename, ".", file_format)
+      
+      if (file_format == "tiff") {
+        ggsave(matrix_filename, individual_matrices[[i]], 
+               width = plot_width, height = individual_heights[i], dpi = dpi,
+               device = "tiff", compression = compression)
+      } else if (file_format == "png") {
+        ggsave(matrix_filename, individual_matrices[[i]], 
+               width = plot_width, height = individual_heights[i], dpi = dpi,
+               device = "png")
+      } else if (file_format == "jpg") {
+        ggsave(matrix_filename, individual_matrices[[i]], 
+               width = plot_width, height = individual_heights[i], dpi = dpi,
+               device = "jpeg")
+      } else if (file_format == "pdf") {
+        ggsave(matrix_filename, individual_matrices[[i]], 
+               width = plot_width, height = individual_heights[i],
+               device = "pdf")
+      }
+      
+      saved_files[[matrix_names[i]]] <- matrix_filename
+    }
+    
+    cat("Individual matrices saved with prefix:", base_filename, "\n")
+    cat("File format:", file_format, "| DPI:", ifelse(file_format %in% c("png", "tiff", "jpg"), dpi, "N/A"), 
+        "| Dimensions:", plot_width, "x", plot_height, "cm\n")
+  } else {
+    cat("Plot saving disabled. Set save_plot = TRUE to save files.\n")
+  }
+  
+  return(list(
+    complete_matrix = complete_matrix,
+    usmile_matrix = usmile_matrix,
+    roc_matrix = roc_matrix,
+    pr_matrix = pr_matrix,
+    individual_plots = list(
+      usmile = usmile_plots,
+      roc = roc_plots,
+      pr = pr_plots
+    ),
+    step_data = step_data_list,
+    model_type = model_type,
+    scenario = scenario_name,
+    method = method_name,
+    reference_type = reference_type,
+    n_steps = n_plots,
+    saved_files = saved_files,
+    plot_settings = list(
+      width = plot_width,
+      height = plot_height,
+      file_format = file_format,
+      dpi = dpi,
+      compression = ifelse(file_format == "tiff", compression, "N/A")
+    )
+  ))
+}
+
+create_usmile_plot_improved_labels <- function(step_data, step_num, method_name, reference_type, selection_history, model_type = "logistic regression") {
+  comparison_df <- step_data$comparison_df
+  
+  if (reference_type == "empty") {
+    ref_vars <- 0
+  } else {
+    if (step_num == 1) {
+      ref_vars <- 0
+    } else {
+      ref_vars <- step_data$n_vars - 1
+    }
+  }
+  
+  n_vars_diff <- step_data$n_vars - ref_vars
+  
+  plot_title <- create_correct_title(step_data, step_num, reference_type, selection_history)
+  
+  netto_nonev <- ifelse(!is.null(step_data$usmile$netto_Y_nonev), 
+                       round(step_data$usmile$netto_Y_nonev, 3), NA)
+  netto_event <- ifelse(!is.null(step_data$usmile$netto_Y_event), 
+                       round(step_data$usmile$netto_Y_event, 3), NA)
+  
+  tryCatch({
+    raw_data <- data.frame(
+      y = comparison_df$y,
+      p_ref = comparison_df$p_ref,
+      p = comparison_df$p
+    )
+    
+    # Determine crit parameter based on model type
+    # For logistic regression: crit = 2 (conditional dotted/solid lines)
+    # For random forest: crit = 0 (solid gray lines)
+    crit_value <- ifelse(model_type == "logistic regression", 2, 0)
+    
+    usmile_plot <- USplot(
+      raw_data = raw_data,
+      y_coef = "rLR",
+      n_vars_diff = n_vars_diff,
+      crit = crit_value  # Use different crit values based on model type
+    )
+    
+    # Extract the base plot from USplot
+    improved_plot <- usmile_plot +
+      labs(
+        title = plot_title,
+        x = "subgroups",
+        y = "rLR"
+      ) +
+      scale_x_discrete(
+        limits = c('nonev_be', 'nonev_wo', 'event_wo', 'event_be'),
+        labels = c("0+", "0-", "1-", "1+")
+      ) +
+      annotate("text", x = 0.02, y = 0.98, 
+               label = ifelse(!is.na(netto_nonev), paste0("rLR0=", netto_nonev), "rLR0=NA"),
+               hjust = 0, vjust = 1, size = 3, 
+               color = "#0F3C78", fontface = "bold") +  
+      annotate("text", x = 4.98, y = 0.98, 
+               label = ifelse(!is.na(netto_event), paste0("rLR1=", netto_event), "rLR1=NA"),
+               hjust = 1, vjust = 1, size = 3, 
+               color = "#D51424", fontface = "bold") +  
+      theme_minimal() +
+      theme(
+        plot.title = element_text(size = 10, hjust = 0.5),
+        axis.title = element_text(size = 9),
+        axis.text = element_text(size = 7),
+        legend.position = "none"
+      )
+    
+    return(improved_plot)
+    
+  }, error = function(e) {
+    cat("Error creating U-smile plot for step", step_num, ":", e$message, "\n")
+    
+    tryCatch({
+      custom_usmile_plot <- create_custom_usmile_plot_clean(step_data, step_num, comparison_df, plot_title, netto_nonev, netto_event)
+      return(custom_usmile_plot)
+    }, error = function(e2) {
+      cat("Error creating custom U-smile plot:", e2$message, "\n")
+      
+      fallback_plot <- ggplot(comparison_df, aes(x = p_ref, y = p, color = factor(y))) +
+        geom_point(alpha = 0.6, size = 0.5) +
+        geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
+        scale_color_manual(values = c("0" = "#0F3C78", "1" = "#D51424")) +
+        annotate("text", x = 0.02, y = 0.98, 
+                 label = ifelse(!is.na(netto_nonev), paste0("rLR0=", netto_nonev), "rLR0=NA"),
+                 hjust = 0, vjust = 1, size = 3, 
+                 color = "#0F3C78", fontface = "bold") +
+        annotate("text", x = 4.98, y = 0.98, 
+                 label = ifelse(!is.na(netto_event), paste0("rLR1=", netto_event), "rLR1=NA"),
+                 hjust = 1, vjust = 1, size = 3, 
+                 color = "#D51424", fontface = "bold") +
+        labs(
+          title = plot_title,
+          x = "subgroups",
+          y = "rLR"
+        ) +
+        theme_minimal() +
+        theme(
+          plot.title = element_text(size = 9, hjust = 0.5),
+          axis.title = element_text(size = 8),
+          axis.text = element_text(size = 6),
+          legend.position = "none"
+        )
+      
+      return(fallback_plot)
+    })
+  })
+}
+
+create_custom_usmile_plot_clean <- function(step_data, step_num, comparison_df, plot_title, netto_nonev, netto_event) {
+  plot_data <- data.frame(
+    p_ref = comparison_df$p_ref,
+    p_new = comparison_df$p,
+    outcome = factor(comparison_df$y, levels = c(0, 1), labels = c("Non-event", "Event"))
+  )
+  
+  custom_plot <- ggplot(plot_data, aes(x = p_ref, y = p_new, color = outcome)) +
+    geom_point(alpha = 0.6, size = 1) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray", linewidth = 0.5) +
+    scale_color_manual(values = c("Non-event" = "#0F3C78", "Event" = "#D51424")) +
+    scale_x_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1)) +
+    scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1)) +
+    annotate("text", x = 0.02, y = 0.98, 
+             label = ifelse(!is.na(netto_nonev), paste0("rLR0=", netto_nonev), "rLR0=NA"),
+             hjust = 0, vjust = 1, size = 3, 
+             color = "#0F3C78", fontface = "bold") +
+    annotate("text", x = 0.98, y = 0.98, 
+             label = ifelse(!is.na(netto_event), paste0("rLR1=", netto_event), "rLR1=NA"),
+             hjust = 1, vjust = 1, size = 3, 
+             color = "#D51424", fontface = "bold") +
+    labs(
+      title = plot_title,
+      x = "subgroups",
+      y = "rLR"
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 10, hjust = 0.5),
+      axis.title = element_text(size = 9),
+      axis.text = element_text(size = 7),
+      legend.position = "none"
+    )
+  
+  return(custom_plot)
+}
+
+create_roc_matrix_plot <- function(step_data, step_num, method_name, reference_type, selection_history, model_type = "logistic regression") {
+  comparison_df <- step_data$comparison_df
+  
+  plot_title <- ""
+  
+  tryCatch({
+    roc_new <- pROC::roc(comparison_df$y, comparison_df$p, quiet = TRUE)
+    auc_new <- as.numeric(pROC::auc(roc_new))
+    
+    show_two_curves <- TRUE
+    
+    if (reference_type == "empty" || step_num == 1) {
+      show_two_curves <- FALSE
+    } else {
+      if (step_data$reference_vars == 0) {
+        show_two_curves <- FALSE
+      }
+    }
+    
+    if (show_two_curves) {
+      roc_ref <- pROC::roc(comparison_df$y, comparison_df$p_ref, quiet = TRUE)
+      auc_ref <- as.numeric(pROC::auc(roc_ref))
+      
+      roc_data_ref <- data.frame(
+        sensitivity = roc_ref$sensitivities,
+        specificity = roc_ref$specificities,
+        model = "Reference"
+      )
+      
+      roc_data_new <- data.frame(
+        sensitivity = roc_new$sensitivities,
+        specificity = roc_new$specificities,
+        model = "New"
+      )
+      
+      roc_data <- rbind(roc_data_ref, roc_data_new)
+      
+      roc_plot <- ggplot(roc_data, aes(x = 1 - specificity, y = sensitivity, linetype = model)) +
+        geom_line(linewidth = 0.8) +
+        geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
+        scale_linetype_manual(values = c("Reference" = "dashed", "New" = "solid")) +
+        coord_equal() +
+        annotate("text", x = 0.95, y = 0.05, 
+                 label = paste0("ΔAUC = ", round(auc_new - auc_ref, 3)),
+                 hjust = 1, vjust = 0, size = 2.5, fontface = "bold", color = "black") +
+        labs(
+          title = plot_title,  
+          x = "1 - Specificity",
+          y = "Sensitivity",
+          linetype = "Model"
+        ) +
+        theme_minimal() +
+        theme(
+          plot.title = element_blank(),  
+          axis.title = element_text(size = 8),
+          axis.text = element_text(size = 6),
+          legend.position = "none"
+        )
+    } else {
+      roc_data_new <- data.frame(
+        sensitivity = roc_new$sensitivities,
+        specificity = roc_new$specificities
+      )
+      
+      roc_plot <- ggplot(roc_data_new, aes(x = 1 - specificity, y = sensitivity)) +
+        geom_line(linewidth = 0.8, color = "black") +
+        geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
+        coord_equal() +
+        annotate("text", x = 0.95, y = 0.05, 
+                 label = paste0("AUC = ", round(auc_new, 3)),
+                 hjust = 1, vjust = 0, size = 2.5, fontface = "bold", color = "black") +
+        labs(
+          title = plot_title,
+          x = "1 - Specificity",
+          y = "Sensitivity"
+        ) +
+        theme_minimal() +
+        theme(
+          plot.title = element_blank(),  
+          axis.title = element_text(size = 8),
+          axis.text = element_text(size = 6)
+        )
+    }
+    
+    return(roc_plot)
+    
+  }, error = function(e) {
+    cat("Error creating ROC plot for step", step_num, ":", e$message, "\n")
+    
+    fallback_plot <- ggplot() +
+      annotate("text", x = 0.5, y = 0.5, label = "ROC Error", size = 3) +
+      labs(title = plot_title) +
+      theme_minimal() +
+      theme(
+        plot.title = element_blank(),  
+        axis.title = element_blank(),
+        axis.text = element_blank()
+      )
+    
+    return(fallback_plot)
+  })
+}
+
+create_pr_matrix_plot <- function(step_data, step_num, method_name, reference_type, selection_history, model_type = "logistic regression") {
+  comparison_df <- step_data$comparison_df
+  
+  plot_title <- ""
+  
+  tryCatch({
+    y_mean <- mean(comparison_df$y)
+    
+    pr_new <- PRROC::pr.curve(
+      scores.class0 = comparison_df$p[comparison_df$y == 1],
+      scores.class1 = comparison_df$p[comparison_df$y == 0],
+      curve = TRUE
+    )
+    auprc_new <- pr_new$auc.integral
+    
+    show_two_curves <- TRUE
+    
+    if (reference_type == "empty" || step_num == 1) {
+      show_two_curves <- FALSE
+    } else {
+      if (step_data$reference_vars == 0) {
+        show_two_curves <- FALSE
+      }
+    }
+    
+    if (show_two_curves) {
+      pr_ref <- PRROC::pr.curve(
+        scores.class0 = comparison_df$p_ref[comparison_df$y == 1],
+        scores.class1 = comparison_df$p_ref[comparison_df$y == 0],
+        curve = TRUE
+      )
+      auprc_ref <- pr_ref$auc.integral
+      
+      pr_data_ref <- data.frame(
+        recall = pr_ref$curve[, 1],
+        precision = pr_ref$curve[, 2],
+        model = "Reference"
+      )
+      
+      pr_data_new <- data.frame(
+        recall = pr_new$curve[, 1],
+        precision = pr_new$curve[, 2],
+        model = "New"
+      )
+      
+      pr_data <- rbind(pr_data_ref, pr_data_new)
+      
+      pr_plot <- ggplot(pr_data, aes(x = recall, y = precision, linetype = model)) +
+        geom_line(linewidth = 0.8) +
+        scale_linetype_manual(values = c("Reference" = "dashed", "New" = "solid")) +
+        geom_hline(yintercept = y_mean, linetype = "dashed", color = "gray", linewidth = 0.5) +
+        annotate("text", x = 0.05, y = 0.05, 
+                 label = paste0("ΔAUC = ", round(auprc_new - auprc_ref, 3)),
+                 hjust = 0, vjust = 0, size = 2.5, fontface = "bold", color = "black") +
+        labs(
+          title = plot_title,
+          x = "Recall",
+          y = "Precision",
+          linetype = "Model"
+        ) +
+        theme_minimal() +
+        theme(
+          plot.title = element_blank(),  
+          axis.title = element_text(size = 8),
+          axis.text = element_text(size = 6),
+          legend.position = "none"
+        )
+    } else {
+      pr_data_new <- data.frame(
+        recall = pr_new$curve[, 1],
+        precision = pr_new$curve[, 2]
+      )
+      
+      pr_plot <- ggplot(pr_data_new, aes(x = recall, y = precision)) +
+        geom_line(linewidth = 0.8, color = "black") +
+        geom_hline(yintercept = y_mean, linetype = "dashed", color = "gray", linewidth = 0.5) +
+        annotate("text", x = 0.05, y = 0.05, 
+                 label = paste0("AUC = ", round(auprc_new, 3)),
+                 hjust = 0, vjust = 0, size = 2.5, fontface = "bold", color = "black") +
+        labs(
+          title = plot_title,
+          x = "Recall",
+          y = "Precision"
+        ) +
+        theme_minimal() +
+        theme(
+          plot.title = element_blank(),  
+          axis.title = element_text(size = 8),
+          axis.text = element_text(size = 6)
+        )
+    }
+    
+    return(pr_plot)
+    
+  }, error = function(e) {
+    cat("Error creating PR plot for step", step_num, ":", e$message, "\n")
+    
+    fallback_plot <- ggplot() +
+      annotate("text", x = 0.5, y = 0.5, label = "PR Error", size = 3) +
+      labs(title = plot_title) +
+      theme_minimal() +
+      theme(
+        plot.title = element_blank(),  
+        axis.title = element_blank(),
+        axis.text = element_blank()
+      )
+    
+    return(fallback_plot)
+  })
+}
+
+create_correct_title <- function(step_data, step_num, reference_type, selection_history) {
+  
+  if (step_num == 1) {
+    if (length(selection_history) >= 1) {
+      first_step <- selection_history[[1]]
+      if (!is.null(first_step$variable) && first_step$variable != "") {
+        if (reference_type == "empty") {
+          return(paste0("Step 1: ", first_step$variable))
+        } else {
+          return(paste0("Step 1: ", first_step$variable, "\n        vs NULL"))
+        }
+      }
+    }
+    if (reference_type == "empty") {
+      return("Step 1: START")
+    } else {
+      return("Step 1: START\n        vs NULL")
+    }
+  }
+  
+  current_vars <- strsplit(step_data$selected_vars, ", ")[[1]]
+  
+  if (reference_type == "empty") {
+    if (length(current_vars) > 0) {
+      return(paste0("Step ", step_num, ": ", paste(current_vars, collapse = "+")))
+    } else {
+      return(paste0("Step ", step_num, ": NULL"))
+    }
+  } else {
+    if (step_num > 1) {
+      prev_step <- selection_history[[step_num - 1]]
+      prev_vars <- strsplit(prev_step$selected_vars, ", ")[[1]]
+      
+      current_vars_str <- ifelse(length(current_vars) > 0, 
+                                paste0("(", paste(current_vars, collapse = "+"), ")"), 
+                                "NULL")
+      prev_vars_str <- ifelse(length(prev_vars) > 0, 
+                             paste0("(", paste(prev_vars, collapse = "+"), ")"), 
+                             "NULL")
+      
+      return(paste0("Step ", step_num, ": ", current_vars_str, "\n        vs ", prev_vars_str))
+    } else {
+      return(paste0("Step ", step_num, ": START\n        vs NULL"))
+    }
+  }
+}
+
+prepare_stepwise_data_with_cv_calibrated <- function(data, selection_history, scenario_name, method_name, reference_type = "previous", model_type = "logistic regression") {
+  step_data <- list()
+  previous_vars <- character(0)
+  
+  for (step_num in 1:length(selection_history)) {
+    current_step <- selection_history[[step_num]]
+    current_vars_str <- current_step$selected_vars
+    
+    if (current_vars_str != "" && current_vars_str != "none") {
+      current_vars <- strsplit(current_vars_str, ", ")[[1]]
+      
+      if (reference_type == "empty") {
+        ref_vars <- character(0)
+      } else {
+        ref_vars <- previous_vars
+      }
+      
+      metrics <- calculate_metrics_with_cv_calibrated(data, current_vars, step_num, method_name, reference_type, ref_vars, model_type)
+      
+      step_data[[step_num]] <- metrics
+      previous_vars <- current_vars
+    }
+  }
+  
+  return(step_data)
+}
+
+calculate_metrics_with_cv_calibrated <- function(data, selected_vars, step_num, method_name, reference_type, prev_vars = NULL, model_type = "logistic regression") {
+  
+  target_var <- ifelse("Class" %in% names(data), "Class", "disease")
+  
+  if (length(selected_vars) > 0) {
+    current_vars_list <- selected_vars
+  } else {
+    current_vars_list <- character(0)
+  }
+  
+  if (reference_type == "empty" || is.null(prev_vars)) {
+    ref_vars_list <- character(0)
+  } else {
+    if (length(prev_vars) > 0) {
+      ref_vars_list <- prev_vars
+    } else {
+      ref_vars_list <- character(0)
+    }
+  }
+  
+  if (model_type == "logistic regression") {
+    if (!exists("cross_validate_model_with_calibration")) {
+      stop("logistic regression cross-validation function not found. Make sure logistic regression selection code is loaded.")
+    }
+    
+    if (length(current_vars_list) > 0) {
+      current_formula <- as.formula(paste(target_var, "~", paste(current_vars_list, collapse = " + ")))
+    } else {
+      current_formula <- as.formula(paste(target_var, "~ 1"))
+    }
+    
+    if (length(ref_vars_list) > 0) {
+      ref_formula <- as.formula(paste(target_var, "~", paste(ref_vars_list, collapse = " + ")))
+    } else {
+      ref_formula <- as.formula(paste(target_var, "~ 1"))
+    }
+    
+    current_cv <- cross_validate_model_with_calibration(data, current_formula)
+    ref_cv <- cross_validate_model_with_calibration(data, ref_formula)
+    
+    current_predictions <- current_cv$predictions_ref
+    ref_predictions <- ref_cv$predictions_ref
+    labels <- current_cv$labels
+    
+  } else if (model_type == "random forest") {
+    if (!exists("cross_validate_rf_with_calibration")) {
+      stop("random forest cross-validation function not found. Make sure new random forest selection code is loaded.")
+    }
+    
+    current_cv <- cross_validate_rf_with_calibration(data, current_vars_list)
+    ref_cv <- cross_validate_rf_with_calibration(data, ref_vars_list)
+    
+    current_predictions <- current_cv$predictions_ref
+    ref_predictions <- ref_cv$predictions_ref
+    labels <- current_cv$labels
+  }
+  
+  n_obs <- length(labels)
+  
+  comparison_df <- data.frame(
+    y = labels,
+    p_ref = ref_predictions,
+    p = current_predictions
+  )
+  
+  n_vars_diff <- length(selected_vars) - length(prev_vars)
+  
+  results <- list(
+    step = step_num,
+    action = ifelse(step_num == 1, "START", ifelse(length(selected_vars) > length(prev_vars), "ADD", "REMOVE")),
+    variable = ifelse(step_num == 1, "START", 
+                     ifelse(length(selected_vars) > length(prev_vars), 
+                            setdiff(selected_vars, prev_vars), 
+                            setdiff(prev_vars, selected_vars))),
+    selected_vars = paste(selected_vars, collapse = ", "),
+    n_vars = length(selected_vars),
+    reference_type = reference_type,
+    reference_vars = length(prev_vars),
+    comparison_df = comparison_df
+  )
+  
+  tryCatch({
+    raw_data <- data.frame(
+      y = comparison_df$y,
+      p_ref = comparison_df$p_ref,
+      p = comparison_df$p
+    )
+    
+    usmile_results <- UScalc_raw(raw_data, y_coef = "rLR", n_vars_diff)
+    
+    if (!is.null(usmile_results$Y_overall)) {
+      results$usmile <- list(
+        Y_overall = usmile_results$Y_overall,
+        netto_Y_event = ifelse(!is.null(usmile_results$netto_Y_event), usmile_results$netto_Y_event, NA),
+        netto_Y_nonev = ifelse(!is.null(usmile_results$netto_Y_nonev), usmile_results$netto_Y_nonev, NA),
+        p_Y_overall = ifelse(!is.null(usmile_results$p_Y_overall), usmile_results$p_Y_overall, NA),
+        p_Y_event = ifelse(!is.null(usmile_results$p_Y_event), usmile_results$p_Y_event, NA),
+        p_Y_nonev = ifelse(!is.null(usmile_results$p_Y_nonev), usmile_results$p_Y_nonev, NA)
+      )
+    }
+    
+  }, error = function(e) {
+    cat("UScalc_raw error for step", step_num, ":", e$message, "\n")
+    results$usmile <- list(
+      Y_overall = NA, netto_Y_event = NA, netto_Y_nonev = NA,
+      p_Y_overall = NA, p_Y_event = NA, p_Y_nonev = NA
+    )
+  })
+  
+  return(results)
+}
+
+calculate_cllr <- function(scores, labels) {
+  scores <- pmin(pmax(scores, 1e-6), 1 - 1e-6)
+  
+  true_cases <- as.logical(labels)
+  false_cases <- !true_cases
+  
+  costs_true <- -log2(scores[true_cases])
+  costs_false <- -log2(1 - scores[false_cases])
+  
+  cllr <- (sum(costs_true) + sum(costs_false)) / length(scores)
+  
+  return(cllr)
+}
+
+create_quick_matrix_plots <- function(scenario_number = 4, method_number = 4, model_type = "logistic regression", reference_type = "empty",
+                                     plot_width = 20, plot_height = 18, 
+                                     save_plot = TRUE, 
+                                     file_format = "png", 
+                                     dpi = 300,
+                                     compression = "lzw") {
+  cat("Creating quick matrix plots...\n")
+  
+  results <- create_complete_matrix_plots_calibrated(
+    scenario_number, method_number, model_type, reference_type,
+    plot_width, plot_height, save_plot, file_format, dpi, compression
+  )
+  
+  cat("\n=== ANALYSIS SUMMARY ===\n")
+  cat("Model:", results$model_type, "\n")
+  cat("Scenario:", results$scenario, "\n")
+  cat("Method:", results$method, "\n")
+  cat("Steps:", results$n_steps, "\n")
+  
+  if (results$n_steps > 0) {
+    final_step <- results$step_data[[results$n_steps]]
+    cat("Final variables:", final_step$selected_vars, "\n")
+  }
+  
+  if (save_plot) {
+    cat("Files saved:", length(results$saved_files), "\n")
+    cat("Settings: Format =", results$plot_settings$file_format, 
+        "| DPI =", results$plot_settings$dpi,
+        "| Size =", results$plot_settings$width, "x", results$plot_settings$height, "cm\n")
+  }
+  
+  return(results)
+}
+
+cat("Complete matrix plots functions ready!\n")
+cat("Available functions:\n")
+cat("1. create_complete_matrix_plots_calibrated() - Full control over all parameters\n")
+cat("2. create_quick_matrix_plots() - Simplified version with graphic options\n\n")
+
+cat("Extended usage examples:\n")
+cat('# Basic usage with default settings (PNG, 300 DPI, 20x18 cm)\n')
+cat('results_logistic_regression <- create_quick_matrix_plots(4, 4, "logistic regression", "empty")\n\n')
+
+cat('# High-quality TIFF for publication\n')
+cat('results_logistic_regression <- create_quick_matrix_plots(\n')
+cat('  scenario_number = 4,\n')
+cat('  method_number = 4,\n')
+cat('  model_type = "logistic regression",\n')
+cat('  reference_type = "empty",\n')
+cat('  plot_width = 25,\n')
+cat('  plot_height = 20,\n')
+cat('  file_format = "tiff",\n')
+cat('  dpi = 600,\n')
+cat('  compression = "lzw"\n')
+cat(')\n\n')
+
+cat('# PDF format for vector graphics\n')
+cat('results_logistic_regression <- create_quick_matrix_plots(\n')
+cat('  scenario_number = 4,\n')
+cat('  method_number = 4,\n')
+cat('  model_type = "logistic regression",\n')
+cat('  reference_type = "empty",\n')
+cat('  plot_width = 20,\n')
+cat('  plot_height = 18,\n')
+cat('  file_format = "pdf"\n')
+cat(')\n\n')
+
+cat('# Only display, no file saving\n')
+cat('results_logistic_regression <- create_quick_matrix_plots(\n')
+cat('  scenario_number = 4,\n')
+cat('  method_number = 4,\n')
+cat('  model_type = "logistic regression",\n')
+cat('  reference_type = "empty",\n')
+cat('  save_plot = FALSE\n')
+cat(')\n\n')
+
+cat("Scenarios: 1=low, 2=medium, 3=high, 4=imbalanced, 5=imbalanced_asym, 6=real_heart\n")
+cat("Methods: 1=AUC, 2=U-smile Overall, 3=U-smile Event, 4=U-smile Nonevent\n")
+cat("Model types: logistic regression, random forest\n")
+cat("Reference types: empty, previous\n")
+cat("File formats: png, tiff, jpg, pdf\n")
+cat("DPI: 72-1200 (recommended: 300 for print, 600 for high-quality)\n")
+cat("Dimensions: width and height in centimeters\n\n")
+
+
+
+# Uncomment to run examples:
+results_logistic_regression_empty <- create_quick_matrix_plots(
+    scenario_number = 4,
+    method_number = 2,
+    model_type = "logistic regression",
+    reference_type = "empty",
+    plot_width = 8.75,
+    plot_height = 7,
+    file_format = "tiff",
+    dpi = 600,
+    compression = "lzw"
+)
+results_logistic_regression_previous <- create_quick_matrix_plots(
+    scenario_number = 4,
+    method_number = 2,
+    model_type = "logistic regression",
+    reference_type = "previous",
+    plot_width = 8.75,
+    plot_height = 7,
+    file_format = "tiff",
+    dpi = 600,
+    compression = "lzw"
+)
+
+results_random_forest_empty <- create_quick_matrix_plots(
+    scenario_number = 4,
+    method_number = 2,
+    model_type = "random forest",
+    reference_type = "empty",
+    plot_width = 11.25,
+    plot_height = 8,
+    file_format = "tiff",
+    dpi = 600,
+    compression = "lzw"
+)
+
+results_random_forest_previous <- create_quick_matrix_plots(
+    scenario_number = 4,
+    method_number = 2,
+    model_type = "random forest",
+    reference_type = "previous",
+    plot_width = 11.25,
+    plot_height = 8,
+    file_format = "tiff",
+    dpi = 600,
+    compression = "lzw"
+)
+```
