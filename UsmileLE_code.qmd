@@ -14,7 +14,7 @@ editor: visual
 # First set the path to the appropriate Python
 library(reticulate)
 
-# Set path to Python with scikit-learn installed
+# Change this line to your Python path
 use_python("C:/your/path/to/python.exe")
 
 # Now try to import sklearn
@@ -3377,4 +3377,5 @@ results_random_forest_previous <- create_quick_matrix_plots(
     compression = "lzw"
 )
 ```
+
 
