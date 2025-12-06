@@ -15,7 +15,7 @@ editor: visual
 library(reticulate)
 
 # Set path to Python with scikit-learn installed
-use_python("C:/Users/p008587/AppData/Local/Programs/Python/Python313/python.exe")
+use_python("C:/your/path/to/python.exe")
 
 # Now try to import sklearn
 tryCatch({
@@ -3377,3 +3377,4 @@ results_random_forest_previous <- create_quick_matrix_plots(
     compression = "lzw"
 )
 ```
+
